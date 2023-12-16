@@ -1,0 +1,38 @@
+* Neorg-language-server
+
+> *NOTE:* this is heavily WIP project
+
+** Features
+
+- (x) `textDocument/documentSymbol`
+- ( ) `textDocument/workspaceSymbol` : list workspace files. (useful for editors that can't have Neorg-plugin support. e.g. Helix)
+- ( ) `textDocument/foldingRange`
+- ( ) `textDocument/selectionRange`
+- ( ) `textDocument/completion`
+-- ( ) link destination/anchor id
+-- ( ) snippets
+--- (x) basic snippet implementation
+--- ( ) suggest snippets by context
+-- ( ) attached/detached modifier extensions or tag params
+- ( ) code action
+-- create file on broken link
+-- move current section to external file
+-- move current nestable list section to structural section
+                                         or external file
+
+*** Links
+- ( ) go to definition / references
+- ( ) show hover (with norg format?)
+- ( ) completion for link destination
+- ( ) diagnostic for broken links
+- ( ) notify existing references on new file
+
+*** format
+
+> see [norg-fmt]
+
+- ( ) on type formatting
+- ( ) range formatting
+
+---
+see more on : {https://github.com/nvim-neorg/neorg/issues/513}[neorg#513]
