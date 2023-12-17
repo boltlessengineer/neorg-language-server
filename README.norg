@@ -2,6 +2,17 @@
 
 > *NOTE:* this is heavily WIP project
 
+** Current State
+
+*** Dependencies
+
+These are core dependencies for Neorg-language-server that must be completed first.
+
+- [tree-sitter-norg3]{https://github.com/nvim-neorg/tree-sitter-norg3}
+    : parser for Norg syntax
+- [NorgBerg]{https://github.com/SevorisDoe/Norgberg}
+    : DB for workspaces
+
 ** Features
 
 - (x) `textDocument/documentSymbol`
@@ -21,7 +32,8 @@
                                          or external file
 
 *** Links
-- ( ) go to definition / references
+- (x) go to definition
+- ( ) go to references
 - ( ) show hover (with norg format?)
 - ( ) completion for link destination
 - ( ) diagnostic for broken links
