@@ -10,5 +10,5 @@ require("lsp-debug-tools").start({
 	expected = { "norg" },
 	name = "neorg-ls",
 	cmd = { "./target/debug/neorg-language-server" },
-	root_dir = vim.fs.dirname(vim.fs.find({ "index.norg" }, { upward = true })[1]),
+	root_dir = vim.fs.dirname(vim.fs.find({ "index.norg" }, { upward = false })[1]),
 })

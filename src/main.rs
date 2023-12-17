@@ -1,4 +1,4 @@
-mod dirman;
+mod config;
 mod document;
 mod handlers;
 mod norg;
@@ -7,11 +7,11 @@ mod tree_sitter;
 use std::fs::File;
 
 use anyhow::Result;
-use log::{error, warn};
+use log::{error, warn, debug};
 use lsp_server::{Connection, Message};
 use lsp_types::{
-    CompletionOptions, OneOf, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
-    WorkDoneProgressOptions,
+    CompletionOptions, InitializeParams, OneOf, ServerCapabilities, TextDocumentSyncCapability,
+    TextDocumentSyncKind, WorkDoneProgressOptions,
 };
 use structured_logger::{json::new_writer, Builder};
 
@@ -19,21 +19,22 @@ use crate::{
     document::init_doc_store,
     handlers::{handle_noti, handle_req},
     norg::init_norg_completion,
-    tree_sitter::init_parser,
+    tree_sitter::init_parser, config::Config,
 };
 
 #[allow(unused_variables)]
-fn main_loop(connection: Connection, params: serde_json::Value) -> Result<()> {
+fn main_loop(connection: Connection, config: &Config) -> Result<()> {
     error!("Server Initialized!!");
+    debug!("{:?}", config.init_params);
     for msg in &connection.receiver {
-        // error!("connection received msg: {:?}", msg);
+        debug!("connection received msg: {:?}", msg);
         let resp = match msg {
-            Message::Request(req) => handle_req(req),
+            Message::Request(req) => handle_req(config, req),
             Message::Response(_) => continue,
             Message::Notification(noti) => handle_noti(noti),
         };
         if let Some(resp) = resp {
-            // error!("{resp:?}");
+            debug!("{resp:?}");
             connection.sender.send(Message::Response(resp))?;
         }
     }
@@ -71,8 +72,10 @@ fn main() -> Result<()> {
         ..Default::default()
     })
     .unwrap();
-    let initialization_params = connection.initialize(server_capabilities)?;
-    main_loop(connection, initialization_params)?;
+    let init_params = connection.initialize(server_capabilities)?;
+    let init_params: InitializeParams = serde_json::from_value(init_params)?;
+    let config = Config::new(init_params);
+    main_loop(connection, &config)?;
     iothreads.join()?;
     warn!("shut down");
     Ok(())

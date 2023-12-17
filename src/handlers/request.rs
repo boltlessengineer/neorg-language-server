@@ -1,11 +1,16 @@
-use log::error;
-use lsp_server::Response;
+use log::{debug, error};
+use lsp_server::{ErrorCode, Response};
 use lsp_types::{
     CompletionItem, CompletionList, CompletionParams, DocumentSymbol, DocumentSymbolParams,
-    Documentation, GotoDefinitionParams, GotoDefinitionResponse, InsertTextFormat,
+    Documentation, GotoDefinitionParams, GotoDefinitionResponse, InsertTextFormat, Url,
 };
 
-use crate::{document::DOC_STORE, norg::NORG_BLOCKS, tree_sitter::ts_to_lsp_range};
+use crate::{
+    config::Config,
+    document::DOC_STORE,
+    norg::NORG_BLOCKS,
+    tree_sitter::{ts_to_lsp_range, LinkDestination, LinkRoot},
+};
 
 pub fn handle_completion(req: lsp_server::Request) -> Response {
     let params: CompletionParams = serde_json::from_value(req.params).unwrap();
@@ -236,28 +241,78 @@ pub fn handle_document_symbol(req: lsp_server::Request) -> Response {
     return Response::new_ok(req.id, serde_json::to_value(symbols).unwrap());
 }
 
-pub fn handle_definition(req: lsp_server::Request) -> Response {
+pub fn handle_definition(config: &Config, req: lsp_server::Request) -> Response {
     error!("goto definition");
     let params: GotoDefinitionParams = serde_json::from_value(req.params).unwrap();
-    let req_uri = params
-        .text_document_position_params
-        .text_document
-        .uri
-        .to_string();
+    let req_uri = params.text_document_position_params.text_document.uri;
     let req_pos = params.text_document_position_params.position;
     let doc_store = DOC_STORE.get().unwrap().lock().unwrap();
-    let doc = doc_store.get(&req_uri).unwrap();
+    let doc = doc_store.get(&req_uri.to_string()).unwrap();
     if let Some(link) = doc.get_link_from_pos(req_pos.into()) {
-        // TODO: get definition from parsed link
-        error!("{link:?}");
-        // let definitions = GotoDefinitionResponse::Scalar(lsp_types::Location {
-        //     uri: params.text_document_position_params.text_document.uri,
-        //     range: lsp_types::Range {
-        //         start: lsp_types::Position { line: 0, character: 0 },
-        //         end: lsp_types::Position { line: 0, character: 2 },
-        //     },
-        // });
-        let definitions = GotoDefinitionResponse::Array(vec![]);
+        debug!("{link:?}");
+        let definitions = match link.destination {
+            LinkDestination::Uri(uri) => GotoDefinitionResponse::Scalar(lsp_types::Location {
+                uri: Url::parse(&uri).expect("invalid url"),
+                range: lsp_types::Range {
+                    start: lsp_types::Position {
+                        line: 0,
+                        character: 0,
+                    },
+                    end: lsp_types::Position {
+                        line: 0,
+                        character: 0,
+                    },
+                },
+            }),
+            LinkDestination::NorgFile {
+                root: LinkRoot::Workspace(_workspace),
+                path: _path,
+            } => {
+                // GotoDefinitionResponse::Array(vec![])
+                return Response::new_err(
+                    req.id,
+                    ErrorCode::RequestFailed as i32,
+                    "workspace link is not supported yet".to_string(),
+                );
+            }
+            LinkDestination::NorgFile { root, path } => {
+                let path = if path.ends_with(".norg") {
+                    path
+                } else {
+                    path + ".norg"
+                };
+                let uri = match root {
+                    LinkRoot::None => req_uri.join(&path).unwrap(),
+                    LinkRoot::Root => Url::parse(&format!("file:///{}", &path)).unwrap(),
+                    LinkRoot::Workspace(_) | LinkRoot::Current => {
+                        return Response::new_err(
+                            req.id,
+                            ErrorCode::RequestFailed as i32,
+                            "workspace link is not supported yet".to_string(),
+                        );
+                    }
+                    #[allow(unreachable_patterns)]
+                    LinkRoot::Current => {
+                        let mut uri = config.init_params.root_uri.as_ref().unwrap().clone();
+                        uri.path_segments_mut().unwrap().push(&path);
+                        uri
+                    }
+                };
+                GotoDefinitionResponse::Scalar(lsp_types::Location {
+                    uri,
+                    range: lsp_types::Range {
+                        start: lsp_types::Position {
+                            line: 0,
+                            character: 0,
+                        },
+                        end: lsp_types::Position {
+                            line: 0,
+                            character: 0,
+                        },
+                    },
+                })
+            }
+        };
         return Response::new_ok(req.id, serde_json::to_value(definitions).unwrap());
     }
     return Response::new_err(

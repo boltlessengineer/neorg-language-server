@@ -44,18 +44,26 @@ pub fn ts_to_lsp_range(ts_range: tree_sitter::Range) -> lsp_types::Range {
 pub enum LinkDestination {
     Uri(String),
     NorgFile {
-        workspace: Option<String>,
+        root: LinkRoot,
         path: String,
         // TODO: scoped location
     },
     // TODO: scope location
 }
 
+#[derive(Debug)]
+pub enum LinkRoot {
+    Current,
+    Workspace(String),
+    Root,
+    None,
+}
+
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct Link {
     range: tree_sitter::Range,
-    destination: LinkDestination,
+    pub destination: LinkDestination,
 }
 
 impl Document {
@@ -85,11 +93,19 @@ impl Document {
                         .to_string(),
                 ),
                 "norg_file" => LinkDestination::NorgFile {
-                    workspace: destination.child_by_field_name("workspace").map(|n| {
-                        n.utf8_text(&self.text.to_string().as_bytes())
-                            .unwrap()
-                            .to_string()
-                    }),
+                    root: destination.child_by_field_name("root").map_or(
+                        LinkRoot::None,
+                        |node| match node.kind() {
+                            "file_root" => LinkRoot::Root,
+                            "current_workspace" => LinkRoot::Current,
+                            "workspace" => LinkRoot::Workspace(
+                                node.utf8_text(&self.text.to_string().as_bytes())
+                                    .unwrap()
+                                    .to_string(),
+                            ),
+                            k => unreachable!("invalid root kind: {k}"),
+                        },
+                    ),
                     path: destination
                         .child_by_field_name("path")
                         .unwrap()
