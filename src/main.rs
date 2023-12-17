@@ -7,7 +7,7 @@ use std::fs::File;
 
 use anyhow::Result;
 use log::{error, warn};
-use lsp_server::{Connection, Message, Notification, Request, Response};
+use lsp_server::{Connection, ErrorCode, Message, Notification, Request, Response, ResponseError};
 use lsp_types::{
     CompletionItem, CompletionList, CompletionOptions, CompletionParams,
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
@@ -23,8 +23,13 @@ use crate::{
     tree_sitter::{init_parser, ts_to_lsp_range},
 };
 
-fn handle_completion(params: serde_json::Value) -> Option<serde_json::Value> {
-    let params: CompletionParams = serde_json::from_value(params).unwrap();
+struct NorgResponse {
+    result: Option<serde_json::Value>,
+    error: Option<lsp_server::ResponseError>,
+}
+
+fn handle_completion(req: Request) -> Response {
+    let params: CompletionParams = serde_json::from_value(req.params).unwrap();
     let uri = params.text_document_position.text_document.uri.to_string();
     let pos = params.text_document_position.position;
     error!("pos: {pos:?}");
@@ -67,7 +72,7 @@ fn handle_completion(params: serde_json::Value) -> Option<serde_json::Value> {
             })
             .collect(),
     };
-    return Some(serde_json::to_value(list).unwrap());
+    return Response::new_ok(req.id, serde_json::to_value(list).unwrap());
 }
 
 // TODO: move to Document
@@ -242,20 +247,20 @@ helo
     }
 }
 
-fn handle_document_symbol(params: serde_json::Value) -> Option<serde_json::Value> {
+fn handle_document_symbol(req: Request) -> Response {
     error!("document symbol");
-    let params: DocumentSymbolParams = serde_json::from_value(params).unwrap();
+    let params: DocumentSymbolParams = serde_json::from_value(req.params).unwrap();
     let uri = params.text_document.uri.to_string();
     let doc_store = DOC_STORE.get().unwrap().lock().unwrap();
     let doc = doc_store.get(&uri).unwrap();
     let doc_text = doc.text.to_string();
     let symbols = tree_to_symbols(&mut doc.tree.walk(), doc_text.as_bytes());
-    return Some(serde_json::to_value(symbols).unwrap());
+    return Response::new_ok(req.id, serde_json::to_value(symbols).unwrap());
 }
 
-fn handle_definition(params: serde_json::Value) -> Option<serde_json::Value> {
+fn handle_definition(req: Request) -> Response {
     error!("goto definition");
-    let params: GotoDefinitionParams = serde_json::from_value(params).unwrap();
+    let params: GotoDefinitionParams = serde_json::from_value(req.params).unwrap();
     let req_uri = params
         .text_document_position_params
         .text_document
@@ -264,32 +269,33 @@ fn handle_definition(params: serde_json::Value) -> Option<serde_json::Value> {
     let req_pos = params.text_document_position_params.position;
     let doc_store = DOC_STORE.get().unwrap().lock().unwrap();
     let doc = doc_store.get(&req_uri).unwrap();
-    let link = doc.get_link_from_pos(req_pos.into())?;
-    // TODO: get definition from parsed link
-    error!("{link:?}");
-    // let definitions = GotoDefinitionResponse::Scalar(lsp_types::Location {
-    //     uri: params.text_document_position_params.text_document.uri,
-    //     range: lsp_types::Range {
-    //         start: lsp_types::Position { line: 0, character: 0 },
-    //         end: lsp_types::Position { line: 0, character: 2 },
-    //     },
-    // });
-    let definitions = GotoDefinitionResponse::Array(vec![]);
-    return Some(serde_json::to_value(definitions).unwrap());
+    if let Some(link) = doc.get_link_from_pos(req_pos.into()) {
+        // TODO: get definition from parsed link
+        error!("{link:?}");
+        // let definitions = GotoDefinitionResponse::Scalar(lsp_types::Location {
+        //     uri: params.text_document_position_params.text_document.uri,
+        //     range: lsp_types::Range {
+        //         start: lsp_types::Position { line: 0, character: 0 },
+        //         end: lsp_types::Position { line: 0, character: 2 },
+        //     },
+        // });
+        let definitions = GotoDefinitionResponse::Array(vec![]);
+        return Response::new_ok(req.id, serde_json::to_value(definitions).unwrap());
+    }
+    return Response::new_err(
+        req.id,
+        ErrorCode::RequestFailed as i32,
+        "can't find link in request position".to_string(),
+    );
 }
 
 fn handle_req(req: Request) -> Option<Response> {
-    let result = match req.method.as_str() {
-        "textDocument/completion" => handle_completion(req.params),
-        "textDocument/documentSymbol" => handle_document_symbol(req.params),
-        "textDocument/definition" => handle_definition(req.params),
+    match req.method.as_str() {
+        "textDocument/completion" => Some(handle_completion(req)),
+        "textDocument/documentSymbol" => Some(handle_document_symbol(req)),
+        "textDocument/definition" => Some(handle_definition(req)),
         _ => None,
-    };
-    return Some(Response {
-        id: req.id,
-        result,
-        error: None,
-    });
+    }
 }
 
 fn handle_did_open(params: serde_json::Value) {
