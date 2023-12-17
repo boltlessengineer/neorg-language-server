@@ -253,16 +253,7 @@ pub fn handle_definition(config: &Config, req: lsp_server::Request) -> Response 
         let definitions = match link.destination {
             LinkDestination::Uri(uri) => GotoDefinitionResponse::Scalar(lsp_types::Location {
                 uri: Url::parse(&uri).expect("invalid url"),
-                range: lsp_types::Range {
-                    start: lsp_types::Position {
-                        line: 0,
-                        character: 0,
-                    },
-                    end: lsp_types::Position {
-                        line: 0,
-                        character: 0,
-                    },
-                },
+                range: Default::default(),
             }),
             LinkDestination::NorgFile {
                 root: LinkRoot::Workspace(_workspace),
@@ -300,16 +291,7 @@ pub fn handle_definition(config: &Config, req: lsp_server::Request) -> Response 
                 };
                 GotoDefinitionResponse::Scalar(lsp_types::Location {
                     uri,
-                    range: lsp_types::Range {
-                        start: lsp_types::Position {
-                            line: 0,
-                            character: 0,
-                        },
-                        end: lsp_types::Position {
-                            line: 0,
-                            character: 0,
-                        },
-                    },
+                    range: Default::default(),
                 })
             }
         };
