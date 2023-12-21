@@ -3,39 +3,54 @@ use tree_sitter::{Node, Query, QueryCursor, TextProvider};
 
 use crate::document::Document;
 
-#[derive(Clone, Copy)]
-pub struct Position {
-    pub line: usize,
-    pub col: usize,
-}
-
-impl From<lsp_types::Position> for Position {
-    fn from(value: lsp_types::Position) -> Self {
-        Position {
-            line: value.line as usize,
-            col: value.character as usize,
-        }
-    }
-}
-impl From<Position> for tree_sitter::Point {
-    fn from(value: Position) -> Self {
+pub trait PositionTrait {
+    fn line(&self) -> usize;
+    fn col(&self) -> usize;
+    fn as_ts_point(&self) -> tree_sitter::Point {
         tree_sitter::Point {
-            row: value.line,
-            column: value.col,
+            row: self.line(),
+            column: self.col(),
+        }
+    }
+    fn as_lsp_pos(&self) -> lsp_types::Position {
+        lsp_types::Position {
+            line: self.line() as u32,
+            character: self.col() as u32,
         }
     }
 }
 
-pub fn ts_to_lsp_range(ts_range: tree_sitter::Range) -> lsp_types::Range {
-    lsp_types::Range {
-        start: lsp_types::Position {
-            line: ts_range.start_point.row as u32,
-            character: ts_range.start_point.column as u32,
-        },
-        end: lsp_types::Position {
-            line: ts_range.end_point.row as u32,
-            character: ts_range.end_point.column as u32,
-        },
+impl PositionTrait for lsp_types::Position {
+    fn line(&self) -> usize {
+        self.line as usize
+    }
+    fn col(&self) -> usize {
+        self.character as usize
+    }
+}
+impl PositionTrait for tree_sitter::Point {
+    fn line(&self) -> usize {
+        self.row
+    }
+    fn col(&self) -> usize {
+        self.column
+    }
+}
+
+// TODO: do we really need Range as Trait??
+pub trait _Range {
+    fn as_ts_range(&self) -> tree_sitter::Range;
+    fn as_lsp_range(&self) -> lsp_types::Range;
+}
+impl _Range for tree_sitter::Range {
+    fn as_ts_range(&self) -> tree_sitter::Range {
+        self.clone()
+    }
+    fn as_lsp_range(&self) -> lsp_types::Range {
+        lsp_types::Range {
+            start: self.start_point.as_lsp_pos(),
+            end: self.end_point.as_lsp_pos(),
+        }
     }
 }
 
@@ -148,18 +163,18 @@ pub fn capture_links(node: Node<'_>, slice: RopeSlice<'_>) -> Vec<Link> {
 }
 
 impl Document {
-    pub fn get_node_from_range(&self, pos: Position) -> Option<Node<'_>> {
+    pub fn get_node_from_range<P: PositionTrait>(&self, pos: P) -> Option<Node<'_>> {
         let root = self.tree.root_node();
-        root.descendant_for_point_range(pos.into(), pos.into())
+        root.descendant_for_point_range(pos.as_ts_point(), pos.as_ts_point())
     }
-    pub fn get_named_node_from_pos(&self, pos: Position) -> Option<Node<'_>> {
+    pub fn get_named_node_from_pos<P: PositionTrait>(&self, pos: P) -> Option<Node<'_>> {
         let root = self.tree.root_node();
-        root.named_descendant_for_point_range(pos.into(), pos.into())
+        root.named_descendant_for_point_range(pos.as_ts_point(), pos.as_ts_point())
     }
     /// get specific kind of parent node from position
-    pub fn find_node_from_pos(
+    pub fn get_kind_node_from_pos<P: PositionTrait>(
         &self,
-        pos: Position,
+        pos: P,
         kind: &str,
         // TODO: Vec instead of Option
         until: Option<&str>,
@@ -176,8 +191,8 @@ impl Document {
         }
         None
     }
-    pub fn get_link_from_pos(&self, pos: Position) -> Option<Link> {
-        let node = self.find_node_from_pos(pos, "link", Some("paragraph"))?;
+    pub fn get_link_from_pos<P: PositionTrait>(&self, pos: P) -> Option<Link> {
+        let node = self.get_kind_node_from_pos(pos, "link", Some("paragraph"))?;
         return Link::parse_from_node(node, self.text.to_string().as_bytes());
     }
 }
@@ -204,7 +219,7 @@ mod test {
         let root = tree.root_node();
         println!("{}", root.to_sexp());
         let doc = Document::new(&doc_str);
-        let pos = Position { line: 2, col: 0 };
+        let pos = lsp_types::Position { line: 2, character: 0 };
         let node = doc.get_node_from_range(pos).unwrap();
         println!("{}", node.to_sexp());
     }

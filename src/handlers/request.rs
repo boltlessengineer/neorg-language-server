@@ -2,14 +2,14 @@ use log::{debug, error};
 use lsp_server::{ErrorCode, Response};
 use lsp_types::{
     CompletionItem, CompletionList, CompletionParams, DocumentSymbol, DocumentSymbolParams,
-    Documentation, GotoDefinitionParams, GotoDefinitionResponse, InsertTextFormat, Url,
+    Documentation, GotoDefinitionParams, GotoDefinitionResponse, InsertTextFormat, Url, ReferenceParams,
 };
 
 use crate::{
     config::Config,
     document::DOC_STORE,
     norg::NORG_BLOCKS,
-    tree_sitter::{ts_to_lsp_range, LinkDestination, LinkRoot},
+    tree_sitter::{LinkDestination, LinkRoot, _Range},
 };
 
 pub fn handle_completion(req: lsp_server::Request) -> Response {
@@ -19,7 +19,7 @@ pub fn handle_completion(req: lsp_server::Request) -> Response {
     error!("pos: {pos:?}");
     let doc_store = DOC_STORE.get().unwrap().lock().unwrap();
     let doc = doc_store.get(&uri).unwrap();
-    let node = doc.get_node_from_range(pos.into()).expect("can't get node");
+    let node = doc.get_node_from_range(pos).expect("can't get node");
     error!("{}", node.to_sexp());
     let list = CompletionList {
         is_incomplete: true,
@@ -84,7 +84,7 @@ fn tree_to_symbols(cursor: &mut ::tree_sitter::TreeCursor, text: &[u8]) -> Vec<D
         };
         if let Some(name) = name {
             let name = name.to_string();
-            let range = ts_to_lsp_range(node.range());
+            let range = node.range().as_lsp_range();
             let sym = DocumentSymbol {
                 name,
                 detail: Some(node.utf8_text(text).unwrap().to_string()),
@@ -247,7 +247,7 @@ pub fn handle_definition(config: &Config, req: lsp_server::Request) -> Response 
     let req_pos = params.text_document_position_params.position;
     let doc_store = DOC_STORE.get().unwrap().lock().unwrap();
     let doc = doc_store.get(&req_uri.to_string()).unwrap();
-    if let Some(link) = doc.get_link_from_pos(req_pos.into()) {
+    if let Some(link) = doc.get_link_from_pos(req_pos) {
         debug!("{link:?}");
         let definitions = match link.destination {
             LinkDestination::Uri(uri) => GotoDefinitionResponse::Scalar(lsp_types::Location {
