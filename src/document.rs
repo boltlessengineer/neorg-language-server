@@ -5,9 +5,9 @@ use std::{
 
 use log::error;
 use ropey::Rope;
-use tree_sitter::{InputEdit, Tree};
+use tree_sitter::{InputEdit, Parser, Tree};
 
-use crate::tree_sitter::PARSER;
+use crate::tree_sitter::{capture_links, Link};
 
 #[derive(Debug)]
 pub struct Document {
@@ -16,19 +16,30 @@ pub struct Document {
     // TODO: linkable symbols (e.g. headings) as Vec<Symbol>
     // cached on didChange event
     // headings inside standard ranged tags are ignored
+    pub links: Vec<Link>,
 }
 
 impl Document {
-    pub fn new(text: String) -> Self {
+    pub fn new(text: &str) -> Self {
         // parse and save tree
         let rope = Rope::from_str(&text);
-        let mut parser = PARSER.get().unwrap().lock().unwrap();
+        let mut parser = Parser::new();
+        parser
+            .set_language(tree_sitter_norg3::language())
+            .expect("could not load norg parser");
         let tree = parser.parse(&text, None).unwrap();
-        return Document { text: rope, tree };
+        let links = capture_links(tree.root_node(), rope.slice(..));
+        return Self {
+            text: rope,
+            tree,
+            links,
+        };
     }
     fn edit_from_range(&mut self, range: lsp_types::Range, insert: &str) -> InputEdit {
-        let start_byte = self.text.line_to_byte(range.start.line as usize) + range.start.character as usize;
-        let end_byte = self.text.line_to_byte(range.end.line as usize) + range.end.character as usize;
+        let start_byte =
+            self.text.line_to_byte(range.start.line as usize) + range.start.character as usize;
+        let end_byte =
+            self.text.line_to_byte(range.end.line as usize) + range.end.character as usize;
         let new_end_byte = start_byte + insert.len();
         self.text.try_remove(start_byte..end_byte).unwrap();
         self.text.try_insert(start_byte, insert).unwrap();
@@ -66,22 +77,17 @@ impl Document {
         // edit tree
         self.tree.edit(&edit);
     }
-    pub fn update_tree(&mut self) {
-        self.tree = PARSER
-            .get()
-            .unwrap()
-            .lock()
-            .unwrap()
+    /// apply text update to document.
+    /// this will re-parse the Tree and capture all links
+    pub fn update(&mut self) {
+        let mut parser = Parser::new();
+        parser
+            .set_language(tree_sitter_norg3::language())
+            .expect("could not load norg parser");
+        self.tree = parser
             .parse(self.text.to_string(), Some(&self.tree))
             .unwrap();
-    }
-    #[allow(dead_code)]
-    pub fn get_links(&self) -> Vec<tree_sitter::Node> {
-        return vec![];
-    }
-    #[allow(dead_code)]
-    pub fn get_targets(&self) -> Vec<tree_sitter::Node> {
-        return vec![];
+        self.links = capture_links(self.tree.root_node(), self.text.slice(..));
     }
 }
 

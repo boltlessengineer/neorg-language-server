@@ -12,7 +12,7 @@ pub fn handle_did_open(params: serde_json::Value) {
         let mut doc_store = DOC_STORE.get().unwrap().lock().unwrap();
         doc_store.insert(
             text_document.uri.to_string(),
-            Document::new(text_document.text),
+            Document::new(&text_document.text),
         );
     }
 }
@@ -33,7 +33,7 @@ pub fn handle_did_change(params: serde_json::Value) {
         });
         error!("doc:");
         error!("{}", doc.text.to_string());
-        doc.update_tree();
+        doc.update();
         error!("tree:");
         error!("{}", doc.tree.root_node().to_sexp());
     }

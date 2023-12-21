@@ -19,7 +19,6 @@ pub fn handle_completion(req: lsp_server::Request) -> Response {
     error!("pos: {pos:?}");
     let doc_store = DOC_STORE.get().unwrap().lock().unwrap();
     let doc = doc_store.get(&uri).unwrap();
-    error!("{}", doc.text.to_string());
     let node = doc.get_node_from_range(pos.into()).expect("can't get node");
     error!("{}", node.to_sexp());
     let list = CompletionList {

@@ -19,7 +19,7 @@ use crate::{
     document::init_doc_store,
     handlers::{handle_noti, handle_req},
     norg::init_norg_completion,
-    tree_sitter::init_parser, config::Config,
+    config::Config,
 };
 
 #[allow(unused_variables)]
@@ -43,8 +43,8 @@ fn main_loop(connection: Connection, config: &Config) -> Result<()> {
 
 fn main() -> Result<()> {
     init_norg_completion();
-    init_parser();
     init_doc_store();
+    // TODO: init_workspace();
     let file = File::options()
         .create(true)
         .append(true)

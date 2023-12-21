@@ -1,6 +1,5 @@
-use std::sync::{Arc, Mutex, OnceLock};
-
-use tree_sitter::{Node, Parser};
+use ropey::RopeSlice;
+use tree_sitter::{Node, Query, QueryCursor, TextProvider};
 
 use crate::document::Document;
 
@@ -40,10 +39,15 @@ pub fn ts_to_lsp_range(ts_range: tree_sitter::Range) -> lsp_types::Range {
     }
 }
 
+pub fn new_norg3_query(source: &str) -> Query {
+    Query::new(tree_sitter_norg3::language(), source).expect("can't generate query")
+}
+
 #[derive(Debug)]
 pub enum LinkDestination {
     Uri(String),
     NorgFile {
+        // TODO: replace to Option<LinkRoot>
         root: LinkRoot,
         path: String,
         // TODO: scoped location
@@ -59,11 +63,88 @@ pub enum LinkRoot {
     None,
 }
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub struct Link {
+    #[allow(dead_code)]
     range: tree_sitter::Range,
     pub destination: LinkDestination,
+}
+
+impl Link {
+    fn parse_from_node<'a>(node: Node<'_>, text_provider: &'a [u8]) -> Option<Self> {
+        let destination = node.child_by_field_name("destination")?;
+        return Some(Link {
+            range: node.range(),
+            destination: match destination.kind() {
+                "uri" => {
+                    LinkDestination::Uri(destination.utf8_text(text_provider).unwrap().to_string())
+                }
+                "norg_file" => LinkDestination::NorgFile {
+                    root: destination
+                        .child_by_field_name("root")
+                        .map_or(LinkRoot::None, |node| match node.kind() {
+                            "file_root" => LinkRoot::Root,
+                            "current_workspace" => LinkRoot::Current,
+                            "workspace" => LinkRoot::Workspace(
+                                node.utf8_text(text_provider).unwrap().to_string(),
+                            ),
+                            k => unreachable!("invalid root kind: {k}"),
+                        }),
+                    path: destination
+                        .child_by_field_name("path")
+                        .unwrap()
+                        .utf8_text(text_provider)
+                        .unwrap()
+                        .to_string(),
+                },
+                t => todo!("unsupported link type: {t}"),
+            },
+        });
+    }
+}
+
+// copied from helix-editor/helix
+// Adapter to convert rope chunks to bytes
+pub struct ChunksBytes<'a> {
+    chunks: ropey::iter::Chunks<'a>,
+}
+impl<'a> Iterator for ChunksBytes<'a> {
+    type Item = &'a [u8];
+    fn next(&mut self) -> Option<Self::Item> {
+        self.chunks.next().map(str::as_bytes)
+    }
+}
+
+pub struct RopeProvider<'a>(pub RopeSlice<'a>);
+impl<'a> TextProvider<'a> for RopeProvider<'a> {
+    type I = ChunksBytes<'a>;
+
+    fn text(&mut self, node: Node) -> Self::I {
+        let fragment = self.0.byte_slice(node.start_byte()..node.end_byte());
+        ChunksBytes {
+            chunks: fragment.chunks(),
+        }
+    }
+}
+
+pub fn capture_links(node: Node<'_>, slice: RopeSlice<'_>) -> Vec<Link> {
+    let query_str = r#"
+    ; query
+    (link
+        destination: _ @destination
+    ) @uri_link
+    "#;
+    let query = new_norg3_query(query_str);
+    let mut qry_cursor = QueryCursor::new();
+    let matches = qry_cursor.matches(&query, node, RopeProvider(slice));
+    return matches
+        .into_iter()
+        .flat_map(|m| {
+            println!("{m:?}");
+            m.captures.iter().map(|c| c.node)
+        })
+        .filter_map(|n| Link::parse_from_node(n, slice.to_string().as_bytes()))
+        .collect();
 }
 
 impl Document {
@@ -75,64 +156,36 @@ impl Document {
         let root = self.tree.root_node();
         root.named_descendant_for_point_range(pos.into(), pos.into())
     }
-    pub fn get_link_from_pos(&self, pos: Position) -> Option<Link> {
+    /// get specific kind of parent node from position
+    pub fn find_node_from_pos(
+        &self,
+        pos: Position,
+        kind: &str,
+        // TODO: Vec instead of Option
+        until: Option<&str>,
+    ) -> Option<Node<'_>> {
         let current_node = self.get_named_node_from_pos(pos)?;
-        let link_node = match current_node.kind() {
-            "uri" | "norg_file" | "workspace" | "norg_file_path" => current_node.parent()?,
-            "link" => current_node,
-            _ => return None,
-        };
-        let destination = link_node.child_by_field_name("destination")?;
-        return Some(Link {
-            range: link_node.range(),
-            destination: match destination.kind() {
-                "uri" => LinkDestination::Uri(
-                    destination
-                        .utf8_text(&self.text.to_string().as_bytes())
-                        .unwrap()
-                        .to_string(),
-                ),
-                "norg_file" => LinkDestination::NorgFile {
-                    root: destination.child_by_field_name("root").map_or(
-                        LinkRoot::None,
-                        |node| match node.kind() {
-                            "file_root" => LinkRoot::Root,
-                            "current_workspace" => LinkRoot::Current,
-                            "workspace" => LinkRoot::Workspace(
-                                node.utf8_text(&self.text.to_string().as_bytes())
-                                    .unwrap()
-                                    .to_string(),
-                            ),
-                            k => unreachable!("invalid root kind: {k}"),
-                        },
-                    ),
-                    path: destination
-                        .child_by_field_name("path")
-                        .unwrap()
-                        .utf8_text(&self.text.to_string().as_bytes())
-                        .unwrap()
-                        .to_string(),
-                },
-                t => todo!("unsupported link type: {t}"),
-            },
-        });
+        let mut cursor = current_node.walk();
+        loop {
+            if cursor.node().kind() == kind {
+                return Some(cursor.node());
+            }
+            if until == Some(cursor.node().kind()) || !cursor.goto_parent() {
+                break;
+            }
+        }
+        None
     }
-}
-
-pub static PARSER: OnceLock<Arc<Mutex<Parser>>> = OnceLock::new();
-pub fn init_parser() {
-    let language = tree_sitter_norg3::language();
-    let mut parser = Parser::new();
-    parser
-        .set_language(language)
-        .expect("could not load norg parser");
-    let _ = PARSER.set(Arc::new(Mutex::new(parser)));
+    pub fn get_link_from_pos(&self, pos: Position) -> Option<Link> {
+        let node = self.find_node_from_pos(pos, "link", Some("paragraph"))?;
+        return Link::parse_from_node(node, self.text.to_string().as_bytes());
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use ropey::Rope;
+    use tree_sitter::Parser;
 
     #[test]
     fn get_node_from_range() {
@@ -143,20 +196,68 @@ mod test {
 @end
 "#,
         );
-        let language = tree_sitter_norg3::language();
         let mut parser = Parser::new();
         parser
-            .set_language(language)
+            .set_language(tree_sitter_norg3::language())
             .expect("could not load norg parser");
         let tree = parser.parse(&doc_str, None).expect("get tree");
         let root = tree.root_node();
         println!("{}", root.to_sexp());
-        let doc = Document {
-            text: Rope::from_str(&doc_str),
-            tree,
-        };
+        let doc = Document::new(&doc_str);
         let pos = Position { line: 2, col: 0 };
         let node = doc.get_node_from_range(pos).unwrap();
         println!("{}", node.to_sexp());
+    }
+
+    #[test]
+    fn query_links() {
+        // cases to match
+        // {|
+        // {:|
+        // {:word|
+        // {:word|}
+        // {:word|:}
+        // {:word|word:}
+        // {:word|word} <- bit weird, but would be useful to have
+        let doc_str = r#"
+        word{
+
+        word{:
+
+        word {}
+
+        {:word:}
+        "#;
+        let doc = Document::new(&doc_str);
+        let root = doc.tree.root_node();
+        println!("{}", root.to_sexp());
+        let query_str = r#"
+            ; query
+            (link
+                destination: (norg_file)
+            ) @_link
+
+            (link
+                destination: (uri)
+            ) @_link
+
+            (
+                (ERROR "{")
+                (punc "}")?
+            ) @_link
+        "#;
+        let query = new_norg3_query(query_str);
+        let mut qry_cursor = QueryCursor::new();
+        let list: Vec<Node> = qry_cursor
+            .matches(&query, root, doc.text.to_string().as_bytes())
+            .into_iter()
+            .flat_map(|m| {
+                println!("{m:?}");
+                m.captures.iter().map(|c| c.node)
+            })
+            .collect();
+        list.iter().for_each(|n| {
+            println!("node:{}", n.to_sexp());
+        })
     }
 }
