@@ -81,7 +81,7 @@ pub enum LinkRoot {
 #[derive(Debug)]
 pub struct Link {
     #[allow(dead_code)]
-    range: tree_sitter::Range,
+    pub range: tree_sitter::Range,
     pub destination: LinkDestination,
 }
 
@@ -184,7 +184,13 @@ impl Document {
             if cursor.node().kind() == kind {
                 return Some(cursor.node());
             }
-            if until == Some(cursor.node().kind()) || !cursor.goto_parent() {
+            // HACK: `!cursor.goto_parent()` doesn't work on node as field content
+            if until == Some(cursor.node().kind()) {
+                break;
+            }
+            if let Some(parent) = cursor.node().parent() {
+                cursor = parent.walk();
+            } else {
                 break;
             }
         }
@@ -200,6 +206,13 @@ impl Document {
 mod test {
     use super::*;
     use tree_sitter::Parser;
+
+    #[test]
+    fn get_link_from_pos() {
+        let doc = Document::new("{:file:}");
+        let link = doc.get_link_from_pos(lsp_types::Position::new(0, 2));
+        assert!(!matches!(link, None));
+    }
 
     #[test]
     fn get_node_from_range() {
