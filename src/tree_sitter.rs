@@ -155,7 +155,6 @@ pub fn capture_links(node: Node<'_>, slice: RopeSlice<'_>) -> Vec<Link> {
     return matches
         .into_iter()
         .flat_map(|m| {
-            println!("{m:?}");
             m.captures.iter().map(|c| c.node)
         })
         .filter_map(|n| Link::parse_from_node(n, slice.to_string().as_bytes()))

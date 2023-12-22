@@ -7,7 +7,7 @@ mod tree_sitter;
 use std::fs::File;
 
 use anyhow::Result;
-use log::{error, warn, debug};
+use log::{error, warn};
 use lsp_server::{Connection, Message};
 use lsp_types::{
     CompletionOptions, InitializeParams, OneOf, ServerCapabilities, TextDocumentSyncCapability,
@@ -25,16 +25,14 @@ use crate::{
 #[allow(unused_variables)]
 fn main_loop(connection: Connection, config: &Config) -> Result<()> {
     error!("Server Initialized!!");
-    debug!("{:?}", config.init_params);
     for msg in &connection.receiver {
-        debug!("connection received msg: {:?}", msg);
+        error!("connection received msg: {:?}", msg);
         let resp = match msg {
             Message::Request(req) => handle_req(config, req),
             Message::Response(_) => continue,
             Message::Notification(noti) => handle_noti(noti),
         };
         if let Some(resp) = resp {
-            debug!("{resp:?}");
             connection.sender.send(Message::Response(resp))?;
         }
     }
