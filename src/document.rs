@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex, OnceLock},
+    sync::{Arc, Mutex, OnceLock}, path::Path,
 };
 
 use log::error;
@@ -34,6 +34,9 @@ impl Document {
             tree,
             links,
         };
+    }
+    pub fn from_path(path: &Path) -> anyhow::Result<Self> {
+        Ok(Document::new(&std::fs::read_to_string(path)?))
     }
     fn edit_from_range(&mut self, range: lsp_types::Range, insert: &str) -> InputEdit {
         let start_byte =

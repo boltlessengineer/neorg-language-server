@@ -1,3 +1,6 @@
+use anyhow::anyhow;
+use lsp_types::Url;
+// use lsp_types::Url;
 use ropey::RopeSlice;
 use tree_sitter::{Node, Query, QueryCursor, TextProvider};
 
@@ -83,6 +86,7 @@ pub struct Link {
     #[allow(dead_code)]
     pub range: tree_sitter::Range,
     pub destination: LinkDestination,
+    // pub uri: Url,
 }
 
 impl Link {
@@ -115,6 +119,28 @@ impl Link {
                 t => todo!("unsupported link type: {t}"),
             },
         });
+    }
+    pub fn as_uri(&self, origin: &Url) -> anyhow::Result<Url> {
+        // join origin+self.path & make a Url
+        // should return Result<Url> because parsing as Url might fail
+        // unimplemented!("return Url type from link target");
+        Ok(match &self.destination {
+            LinkDestination::Uri(uri) => Url::parse(&uri)?,
+            LinkDestination::NorgFile { root, path } => {
+                let path = if path.ends_with(".norg") {
+                    path.to_owned()
+                } else {
+                    path.to_owned() + ".norg"
+                };
+                match root {
+                    LinkRoot::None => origin.join(&path)?,
+                    LinkRoot::Root => Url::parse(&format!("file:///{}", &path))?,
+                    LinkRoot::Workspace(_) | LinkRoot::Current => {
+                        return Err(anyhow!("workspace links are not implemented yet"))
+                    }
+                }
+            }
+        })
     }
 }
 
@@ -154,9 +180,7 @@ pub fn capture_links(node: Node<'_>, slice: RopeSlice<'_>) -> Vec<Link> {
     let matches = qry_cursor.matches(&query, node, RopeProvider(slice));
     return matches
         .into_iter()
-        .flat_map(|m| {
-            m.captures.iter().map(|c| c.node)
-        })
+        .flat_map(|m| m.captures.iter().map(|c| c.node))
         .filter_map(|n| Link::parse_from_node(n, slice.to_string().as_bytes()))
         .collect();
 }
@@ -231,7 +255,10 @@ mod test {
         let root = tree.root_node();
         println!("{}", root.to_sexp());
         let doc = Document::new(&doc_str);
-        let pos = lsp_types::Position { line: 2, character: 0 };
+        let pos = lsp_types::Position {
+            line: 2,
+            character: 0,
+        };
         let node = doc.get_node_from_range(pos).unwrap();
         println!("{}", node.to_sexp());
     }

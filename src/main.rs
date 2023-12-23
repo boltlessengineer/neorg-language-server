@@ -22,7 +22,6 @@ use crate::{
     config::Config,
 };
 
-#[allow(unused_variables)]
 fn main_loop(connection: Connection, config: &Config) -> Result<()> {
     error!("Server Initialized!!");
     for msg in &connection.receiver {
@@ -66,6 +65,7 @@ fn main() -> Result<()> {
             TextDocumentSyncKind::INCREMENTAL,
         )),
         definition_provider: Some(OneOf::Left(true)),
+        references_provider: Some(OneOf::Left(true)),
         document_symbol_provider: Some(OneOf::Left(true)),
         ..Default::default()
     })

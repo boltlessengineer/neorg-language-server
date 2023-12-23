@@ -33,7 +33,7 @@ These are core dependencies for Neorg-language-server that must be completed fir
 
 *** Links
 - (x) go to definition
-- ( ) go to references
+- (x) go to references
 - ( ) show hover (with norg format?)
 - ( ) completion for link destination
 - ( ) diagnostic for broken links

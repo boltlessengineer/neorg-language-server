@@ -1,15 +1,19 @@
+use std::path::Path;
+
 use log::{debug, error};
 use lsp_server::{ErrorCode, Response};
 use lsp_types::{
     CompletionItem, CompletionList, CompletionParams, DocumentSymbol, DocumentSymbolParams,
-    Documentation, GotoDefinitionParams, GotoDefinitionResponse, InsertTextFormat, Url, ReferenceParams,
+    Documentation, GotoDefinitionParams, GotoDefinitionResponse, InsertTextFormat, Location,
+    ReferenceParams, Url,
 };
+use walkdir::WalkDir;
 
 use crate::{
     config::Config,
-    document::DOC_STORE,
+    document::{Document, DOC_STORE},
     norg::NORG_BLOCKS,
-    tree_sitter::{LinkDestination, LinkRoot, _Range},
+    tree_sitter::_Range,
 };
 
 pub fn handle_completion(req: lsp_server::Request) -> Response {
@@ -240,7 +244,7 @@ pub fn handle_document_symbol(req: lsp_server::Request) -> Response {
     return Response::new_ok(req.id, serde_json::to_value(symbols).unwrap());
 }
 
-pub fn handle_definition(config: &Config, req: lsp_server::Request) -> Response {
+pub fn handle_definition(req: lsp_server::Request) -> Response {
     error!("goto definition");
     let params: GotoDefinitionParams = serde_json::from_value(req.params).unwrap();
     let req_uri = params.text_document_position_params.text_document.uri;
@@ -249,56 +253,105 @@ pub fn handle_definition(config: &Config, req: lsp_server::Request) -> Response 
     let doc = doc_store.get(&req_uri.to_string()).unwrap();
     if let Some(link) = doc.get_link_from_pos(req_pos) {
         debug!("{link:?}");
-        let definitions = match link.destination {
-            LinkDestination::Uri(uri) => GotoDefinitionResponse::Scalar(lsp_types::Location {
-                uri: Url::parse(&uri).expect("invalid url"),
-                range: Default::default(),
-            }),
-            LinkDestination::NorgFile {
-                root: LinkRoot::Workspace(_workspace),
-                path: _path,
-            } => {
-                // GotoDefinitionResponse::Array(vec![])
+        match link.as_uri(&req_uri) {
+            Ok(link_uri) => {
+                let definitions = GotoDefinitionResponse::Scalar(lsp_types::Location {
+                    uri: link_uri,
+                    range: Default::default(),
+                });
+                return Response::new_ok(req.id, serde_json::to_value(definitions).unwrap());
+            }
+            Err(_) => {
                 return Response::new_err(
                     req.id,
                     ErrorCode::RequestFailed as i32,
                     "workspace link is not supported yet".to_string(),
                 );
             }
-            LinkDestination::NorgFile { root, path } => {
-                let path = if path.ends_with(".norg") {
-                    path
-                } else {
-                    path + ".norg"
-                };
-                let uri = match root {
-                    LinkRoot::None => req_uri.join(&path).unwrap(),
-                    LinkRoot::Root => Url::parse(&format!("file:///{}", &path)).unwrap(),
-                    LinkRoot::Workspace(_) | LinkRoot::Current => {
-                        return Response::new_err(
-                            req.id,
-                            ErrorCode::RequestFailed as i32,
-                            "workspace link is not supported yet".to_string(),
-                        );
-                    }
-                    #[allow(unreachable_patterns)]
-                    LinkRoot::Current => {
-                        let mut uri = config.init_params.root_uri.as_ref().unwrap().clone();
-                        uri.path_segments_mut().unwrap().push(&path);
-                        uri
-                    }
-                };
-                GotoDefinitionResponse::Scalar(lsp_types::Location {
-                    uri,
-                    range: Default::default(),
-                })
-            }
-        };
-        return Response::new_ok(req.id, serde_json::to_value(definitions).unwrap());
+        }
     }
     return Response::new_err(
         req.id,
         lsp_server::ErrorCode::RequestFailed as i32,
         "can't find link in request position".to_string(),
     );
+}
+
+pub fn handle_references(config: &Config, req: lsp_server::Request) -> Response {
+    let params: ReferenceParams = serde_json::from_value(req.params).unwrap();
+    let req_uri = params.text_document_position.text_document.uri;
+    let req_pos = params.text_document_position.position;
+    let doc_store = DOC_STORE.get().unwrap().lock().unwrap();
+    let doc = doc_store.get(&req_uri.to_string()).unwrap();
+    if let Some(link) = doc.get_link_from_pos(req_pos) {
+        // walk through directory and parse all documents, capture links
+        // filter link by destination
+        error!("{link:?}");
+        // HACK: use virtual workspace instead
+        #[allow(deprecated)]
+        let root_path = &config.init_params.root_path.as_ref().unwrap();
+        if let Ok(req_link_uri) = link.as_uri(&req_uri) {
+            let references: Vec<Location> = list_references_from_uri(req_link_uri, &root_path)
+                .into_iter()
+                .map(|(origin, range)| Location { uri: origin, range })
+                .collect();
+            return Response::new_ok(req.id, serde_json::to_value(references).unwrap());
+        } else {
+            return Response::new_err(
+                req.id,
+                lsp_server::ErrorCode::RequestFailed as i32,
+                "workspace links are not implemented yet".to_string(),
+            );
+        }
+    }
+    return Response::new_err(
+        req.id,
+        lsp_server::ErrorCode::InvalidRequest as i32,
+        "can't find link in request position".to_string(),
+    );
+}
+
+fn list_references_from_uri<P: AsRef<Path>>(uri: Url, root: P) -> Vec<(Url, lsp_types::Range)> {
+    // TODO: generalize with crate::workspace::Workspace::iter_documents()
+    WalkDir::new(root)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter_map(|entry| {
+            let path = entry.path();
+            if path.extension()? == "norg" {
+                let url = Url::from_file_path(path.to_owned()).ok()?;
+                return Document::from_path(path)
+                    .ok()
+                    .map(|d| (url, d));
+            }
+            None
+        })
+        .flat_map(|(path, d)| d.links.into_iter().map(move |l| (path.clone(), l)))
+        .filter(|(origin, link)| {
+            if let Ok(link_uri) = link.as_uri(origin) {
+                uri == link_uri
+            } else {
+                false
+            }
+        })
+        .map(|(path, l)| (path, l.range.as_lsp_range()))
+        .collect()
+}
+
+#[cfg(test)]
+mod test_request {
+    use std::path::Path;
+
+    use super::*;
+
+    #[test]
+    fn list_references() {
+        structured_logger::Builder::with_level("debug").init();
+        let path = Path::new("test/index.norg");
+        let current_dir = std::env::current_dir().expect("failed to get current dir");
+        list_references_from_uri(
+            Url::from_file_path(current_dir.join(path)).unwrap(),
+            current_dir.join("./test"),
+        );
+    }
 }

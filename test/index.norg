@@ -1,0 +1,20 @@
+|example
+{:folder/foo:}
+|end
+* heading-1
+* heading(2)
+  paragraph
+* heading.3
+  paragraph
+* heading...4
+  paragraph
+  {:folder/foo:}
+  {:./folder/foo:}
+  {:$/folder/foo:}
+  {:$folder/foo:}
+  {:/home/ubuntu/notes/todo:}
+
+@code
+this is not a link: {:folder/foo:}
+@end
+{file:///home/ubuntu/notes/todo.norg}
