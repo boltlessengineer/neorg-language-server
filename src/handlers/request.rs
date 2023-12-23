@@ -313,20 +313,20 @@ mod test {
                 // but currently no way to capture nested node with tree-sitter queries
                 // see: https://github.com/tree-sitter/tree-sitter/issues/880
                 Location {
-                    uri: url!("/home/ubuntu/projects/neorg-ls/test/index.norg"),
+                    uri: url!("test/index.norg"),
                     range: range!(1, 0, 1, 14),
                 },
                 //
                 Location {
-                    uri: url!("/home/ubuntu/projects/neorg-ls/test/index.norg"),
+                    uri: url!("test/index.norg"),
                     range: range!(10, 2, 10, 16),
                 },
                 Location {
-                    uri: url!("/home/ubuntu/projects/neorg-ls/test/index.norg"),
+                    uri: url!("test/index.norg"),
                     range: range!(11, 2, 11, 18),
                 },
                 Location {
-                    uri: url!("/home/ubuntu/projects/neorg-ls/test/folder/bar.norg"),
+                    uri: url!("test/folder/bar.norg"),
                     range: range!(0, 0, 0, 7),
                 },
             ]
