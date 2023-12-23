@@ -13,7 +13,7 @@ use crate::{
     config::Config,
     document::{Document, DOC_STORE},
     norg::NORG_BLOCKS,
-    tree_sitter::_Range,
+    tree_sitter::ToLspRange,
 };
 
 pub fn handle_completion(req: lsp_server::Request) -> Response {
@@ -32,7 +32,6 @@ pub fn handle_completion(req: lsp_server::Request) -> Response {
             .unwrap()
             .iter()
             .filter(|item| {
-                // HACK: find better way (maybe with query?)
                 let mut node = node;
                 let skip = vec!["paragraph", "para_break"];
                 if item.valid_parents.len() == 0 {
@@ -74,8 +73,8 @@ fn tree_to_symbols(cursor: &mut ::tree_sitter::TreeCursor, text: &[u8]) -> Vec<D
             }
             "heading" => {
                 // TODO: return range that can used for `name` and `selection_range`
-                // TODO: also should return the symbol type
-                // TODO: if field `title` is empty (slide/indent segments,) create
+                // also should return the symbol type
+                // if field `title` is empty (slide/indent segments,) create
                 // title with first non-empty line
                 let _title = node.child_by_field_name("title");
                 Some("heading")

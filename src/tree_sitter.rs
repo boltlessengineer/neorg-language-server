@@ -39,15 +39,10 @@ impl PositionTrait for tree_sitter::Point {
     }
 }
 
-// TODO: do we really need Range as Trait??
-pub trait _Range {
-    fn as_ts_range(&self) -> tree_sitter::Range;
+pub trait ToLspRange {
     fn as_lsp_range(&self) -> lsp_types::Range;
 }
-impl _Range for tree_sitter::Range {
-    fn as_ts_range(&self) -> tree_sitter::Range {
-        self.clone()
-    }
+impl ToLspRange for tree_sitter::Range {
     fn as_lsp_range(&self) -> lsp_types::Range {
         lsp_types::Range {
             start: self.start_point.as_lsp_pos(),

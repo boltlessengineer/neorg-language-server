@@ -8,8 +8,7 @@ pub struct NorgCompletion {
     pub kind: CompletionItemKind,
     pub text: String,
     pub desc: String,
-    // HACK: find better way to check validity
-    /// valid parent node types
+    // HACK: check validity with Fn or query
     pub valid_parents: Vec<String>,
 }
 
