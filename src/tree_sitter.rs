@@ -150,28 +150,6 @@ impl Link {
             }
         })
     }
-    pub fn as_uri(&self, origin: &Url) -> anyhow::Result<Url> {
-        // join origin+self.path & make a Url
-        // should return Result<Url> because parsing as Url might fail
-        // unimplemented!("return Url type from link target");
-        Ok(match &self.destination {
-            LinkDestination::Uri(uri) => Url::parse(&uri)?,
-            LinkDestination::NorgFile { root, path } => {
-                let path = if path.ends_with(".norg") {
-                    path.to_owned()
-                } else {
-                    path.to_owned() + ".norg"
-                };
-                match root {
-                    LinkRoot::None => origin.join(&path)?,
-                    LinkRoot::Root => Url::parse(&format!("file:///{}", &path))?,
-                    LinkRoot::Workspace(_) | LinkRoot::Current => {
-                        return Err(anyhow!("workspace links are not implemented yet"))
-                    }
-                }
-            }
-        })
-    }
 }
 
 // copied from helix-editor/helix

@@ -253,19 +253,16 @@ pub fn handle_definition(req: lsp_server::Request) -> Response {
     let doc = doc_store.get(&req_uri.to_string()).unwrap();
     if let Some(link) = doc.get_link_from_pos(req_pos) {
         debug!("{link:?}");
-        match link.as_uri(&req_uri) {
-            Ok(link_uri) => {
-                let definitions = GotoDefinitionResponse::Scalar(lsp_types::Location {
-                    uri: link_uri,
-                    range: Default::default(),
-                });
+        match link.get_location(&req_uri) {
+            Ok(loc) => {
+                let definitions = GotoDefinitionResponse::Scalar(loc);
                 return Response::new_ok(req.id, serde_json::to_value(definitions).unwrap());
             }
-            Err(_) => {
+            Err(e) => {
                 return Response::new_err(
                     req.id,
                     ErrorCode::RequestFailed as i32,
-                    "workspace link is not supported yet".to_string(),
+                    e.to_string(),
                 );
             }
         }
@@ -295,11 +292,11 @@ pub fn handle_references(config: &Config, req: lsp_server::Request) -> Response 
                 let references = list_references_from_location(req_link_loc, &root_path);
                 return Response::new_ok(req.id, serde_json::to_value(references).unwrap());
             }
-            Err(_) => {
+            Err(e) => {
                 return Response::new_err(
                     req.id,
                     lsp_server::ErrorCode::RequestFailed as i32,
-                    "workspace links are not implemented yet".to_string(),
+                    e.to_string(),
                 );
             }
         }
