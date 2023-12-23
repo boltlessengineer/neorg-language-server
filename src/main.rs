@@ -16,10 +16,10 @@ use lsp_types::{
 use structured_logger::{json::new_writer, Builder};
 
 use crate::{
+    config::Config,
     document::init_doc_store,
     handlers::{handle_noti, handle_req},
     norg::init_norg_completion,
-    config::Config,
 };
 
 fn main_loop(connection: Connection, config: &Config) -> Result<()> {

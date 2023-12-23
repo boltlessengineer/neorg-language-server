@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex, OnceLock}, path::Path,
+    path::Path,
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use log::error;

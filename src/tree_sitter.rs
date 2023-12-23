@@ -121,7 +121,11 @@ impl Link {
                 uri: Url::parse(&uri)?,
                 range: Default::default(),
             },
-            LinkDestination::NorgFile { root, path, scope: _ } => {
+            LinkDestination::NorgFile {
+                root,
+                path,
+                scope: _,
+            } => {
                 let path = if path.ends_with(".norg") {
                     path.to_owned()
                 } else {

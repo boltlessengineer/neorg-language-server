@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use log::{debug, error};
-use lsp_server::{ErrorCode, Response};
+use lsp_server::Response;
 use lsp_types::{
     CompletionItem, CompletionList, CompletionParams, DocumentSymbol, DocumentSymbolParams,
     Documentation, GotoDefinitionParams, GotoDefinitionResponse, InsertTextFormat, Location,
@@ -143,9 +143,11 @@ pub fn handle_definition(req: lsp_server::Request) -> Response {
                 let definitions = GotoDefinitionResponse::Scalar(loc);
                 Response::new_ok(req.id, serde_json::to_value(definitions).unwrap())
             }
-            Err(e) => {
-                Response::new_err(req.id, ErrorCode::RequestFailed as i32, e.to_string())
-            }
+            Err(e) => Response::new_err(
+                req.id,
+                lsp_server::ErrorCode::RequestFailed as i32,
+                e.to_string(),
+            ),
         }
     } else {
         Response::new_err(
@@ -174,13 +176,11 @@ pub fn handle_references(config: &Config, req: lsp_server::Request) -> Response 
                 let references = list_references_from_location(req_link_loc, &root_path);
                 Response::new_ok(req.id, serde_json::to_value(references).unwrap())
             }
-            Err(e) => {
-                Response::new_err(
-                    req.id,
-                    lsp_server::ErrorCode::RequestFailed as i32,
-                    e.to_string(),
-                )
-            }
+            Err(e) => Response::new_err(
+                req.id,
+                lsp_server::ErrorCode::RequestFailed as i32,
+                e.to_string(),
+            ),
         }
     } else {
         Response::new_err(
