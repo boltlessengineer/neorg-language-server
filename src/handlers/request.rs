@@ -61,7 +61,6 @@ pub fn handle_completion(req: lsp_server::Request) -> Response {
     return Response::new_ok(req.id, serde_json::to_value(list).unwrap());
 }
 
-#[allow(deprecated)]
 fn tree_to_symbols(cursor: &mut ::tree_sitter::TreeCursor, text: &[u8]) -> Vec<DocumentSymbol> {
     let node = cursor.node();
     let mut symbols: Vec<DocumentSymbol> = vec![];
@@ -88,6 +87,7 @@ fn tree_to_symbols(cursor: &mut ::tree_sitter::TreeCursor, text: &[u8]) -> Vec<D
         if let Some(name) = name {
             let name = name.to_string();
             let range = node.range().as_lsp_range();
+            #[allow(deprecated)]
             let sym = DocumentSymbol {
                 name,
                 detail: Some(node.utf8_text(text).unwrap().to_string()),
@@ -169,8 +169,7 @@ pub fn handle_references(config: &Config, req: lsp_server::Request) -> Response 
         // filter link by destination
         error!("{link:?}");
         // HACK: use virtual workspace instead
-        #[allow(deprecated)]
-        let root_path = &config.init_params.root_path.as_ref().unwrap();
+        let root_path = config.init_params.root_uri.as_ref().unwrap().path();
         match link.get_location(&req_uri) {
             Ok(req_link_loc) => {
                 let references = list_references_from_location(req_link_loc, &root_path);

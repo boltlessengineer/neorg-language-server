@@ -42,14 +42,14 @@ fn main() -> Result<()> {
     init_norg_completion();
     init_doc_store();
     // TODO: init_workspace();
-    let file = File::options()
+    let log_file = File::options()
         .create(true)
         .append(true)
         .open("neorg.log")
         .expect("can't open log file");
-    let mut builder = Builder::with_level("WARN");
-    builder = builder.with_target_writer("*", new_writer(file));
-    builder.init();
+    Builder::with_level("WARN")
+        .with_target_writer("*", new_writer(log_file))
+        .init();
     let (connection, iothreads) = Connection::stdio();
     let server_capabilities = serde_json::to_value(ServerCapabilities {
         completion_provider: Some(CompletionOptions {
