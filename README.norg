@@ -16,7 +16,7 @@ These are core dependencies for Neorg-language-server that must be completed fir
 ** Features
 
 - (x) `documentSymbol` from headings
-- (x) `workspaceSymbol` from headings
+- ( ) `workspaceSymbol` from headings
 - ( ) `completion`
 -- link destination
 -- anchor id
@@ -31,11 +31,18 @@ These are core dependencies for Neorg-language-server that must be completed fir
                                          or external file
 
 *** Links
+- ( ) support all linkable types
+-- (x) URI
+-- ( ) file location
+--- (x) basic (e.g. `{:file:}`)
+--- ( ) scoping (e.g. `{:file:* heading}`)
+-- ( ) scope (line number, detached modifier)
 - (x) go to definition
 - (x) go to references
-- ( ) show hover (with norg format?)
+- ( ) show hover (with norg format? is that even possible?)
 - ( ) completion for link destination
 - ( ) diagnostic for broken links
+- ( ) update on file rename
 - ( ) notify existing references on new file
 
 *** misc
@@ -44,10 +51,13 @@ These are core dependencies for Neorg-language-server that must be completed fir
 
 *** format
 
-> see [norg-fmt]
+> formats should be handled from separate project.\
+  see [norg-fmt]
 
 - ( ) on type formatting
 - ( ) range formatting
 
 ---
 see more on : {https://github.com/nvim-neorg/neorg/issues/513}[neorg#513]
+
+%|vim: set conceallevel=3:|%

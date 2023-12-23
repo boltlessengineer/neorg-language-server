@@ -66,9 +66,10 @@ pub enum LinkDestination {
     NorgFile {
         root: Option<LinkRoot>,
         path: String,
-        // TODO: scoped location
+        scope: Vec<LinkScope>,
     },
-    // TODO: scope location
+    #[allow(dead_code)]
+    Scope(Vec<LinkScope>),
 }
 
 #[derive(Debug)]
@@ -77,6 +78,9 @@ pub enum LinkRoot {
     Workspace(String),
     Root,
 }
+
+#[derive(Debug)]
+pub struct LinkScope;
 
 #[derive(Debug)]
 pub struct Link {
@@ -110,6 +114,7 @@ impl Link {
                         .utf8_text(source)
                         .unwrap()
                         .to_string(),
+                    scope: vec![],
                 },
                 t => todo!("unsupported link type: {t}"),
             },
@@ -125,7 +130,7 @@ impl Link {
                 uri: Url::parse(&uri)?,
                 range: Default::default(),
             },
-            LinkDestination::NorgFile { root, path } => {
+            LinkDestination::NorgFile { root, path, scope: _ } => {
                 let path = if path.ends_with(".norg") {
                     path.to_owned()
                 } else {
@@ -143,6 +148,7 @@ impl Link {
                     range: Default::default(),
                 }
             }
+            LinkDestination::Scope(_) => unimplemented!("scope is not implemented yet"),
         })
     }
 }
