@@ -64,8 +64,7 @@ pub fn new_norg3_query(source: &str) -> Query {
 pub enum LinkDestination {
     Uri(String),
     NorgFile {
-        // TODO: replace to Option<LinkRoot>
-        root: LinkRoot,
+        root: Option<LinkRoot>,
         path: String,
         // TODO: scoped location
     },
@@ -77,7 +76,6 @@ pub enum LinkRoot {
     Current,
     Workspace(String),
     Root,
-    None,
 }
 
 #[derive(Debug)]
@@ -85,7 +83,7 @@ pub struct Link {
     #[allow(dead_code)]
     pub range: tree_sitter::Range,
     pub destination: LinkDestination,
-    // pub uri: Url,
+    // pub origin: Url,
 }
 
 impl Link {
@@ -94,18 +92,16 @@ impl Link {
         return Some(Link {
             range: node.range(),
             destination: match destination.kind() {
-                "uri" => {
-                    LinkDestination::Uri(destination.utf8_text(source).unwrap().to_string())
-                }
+                "uri" => LinkDestination::Uri(destination.utf8_text(source).unwrap().to_string()),
                 "norg_file" => LinkDestination::NorgFile {
                     root: destination
                         .child_by_field_name("root")
-                        .map_or(LinkRoot::None, |node| match node.kind() {
-                            "file_root" => LinkRoot::Root,
-                            "current_workspace" => LinkRoot::Current,
-                            "workspace" => LinkRoot::Workspace(
+                        .map_or(None, |node| match node.kind() {
+                            "file_root" => Some(LinkRoot::Root),
+                            "current_workspace" => Some(LinkRoot::Current),
+                            "workspace" => Some(LinkRoot::Workspace(
                                 node.utf8_text(source).unwrap().to_string(),
-                            ),
+                            )),
                             k => unreachable!("invalid root kind: {k}"),
                         }),
                     path: destination
@@ -136,9 +132,9 @@ impl Link {
                     path.to_owned() + ".norg"
                 };
                 let uri = match root {
-                    LinkRoot::None => origin.join(&path)?,
-                    LinkRoot::Root => Url::parse(&format!("file:///{}", &path))?,
-                    LinkRoot::Workspace(_) | LinkRoot::Current => {
+                    None => origin.join(&path)?,
+                    Some(LinkRoot::Root) => Url::parse(&format!("file:///{}", &path))?,
+                    Some(LinkRoot::Workspace(_)) | Some(LinkRoot::Current) => {
                         return Err(anyhow!("workspace links are not implemented yet"))
                     }
                 };
