@@ -16,5 +16,5 @@ serde = "1.0.193"
 serde_json = "1.0.108"
 structured-logger = "1.0.3"
 tree-sitter = "0.20.10"
-tree-sitter-norg3 = { path = "/home/ubuntu/projects/tree-sitter-norg3" }
+tree-sitter-norg3 = { git = "https://github.com/boltlessengineer/tree-sitter-norg3-pr1", branch = "paragraph_break" }
 walkdir = "2.4.0"
