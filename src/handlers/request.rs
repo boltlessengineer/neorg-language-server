@@ -297,7 +297,7 @@ mod test {
 
     #[test]
     fn references() {
-        structured_logger::Builder::with_level("debug").init();
+        // structured_logger::Builder::with_level("debug").init();
         let path = Path::new("test/folder/foo.norg");
         let current_dir = std::env::current_dir().expect("failed to get current dir");
         let location = Location {
@@ -305,14 +305,17 @@ mod test {
             range: Default::default(),
         };
         let refs = list_references_from_location(location, current_dir.join("./test"));
-        println!("{refs:#?}");
         assert_eq!(
             refs,
             vec![
+                // FIXME: first link should be invalid
+                // but currently no way to capture nested node with tree-sitter queries
+                // see: https://github.com/tree-sitter/tree-sitter/issues/880
                 Location {
                     uri: url!("/home/ubuntu/projects/neorg-ls/test/index.norg"),
                     range: range!(1, 0, 1, 14),
                 },
+                //
                 Location {
                     uri: url!("/home/ubuntu/projects/neorg-ls/test/index.norg"),
                     range: range!(10, 2, 10, 16),
