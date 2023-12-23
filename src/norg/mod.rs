@@ -13,14 +13,16 @@ pub struct NorgCompletion {
     pub valid_parents: Vec<String>,
 }
 
-fn make_cmp_item(name: &str, kind: CompletionItemKind, text: &str, desc: &str) -> NorgCompletion {
-    NorgCompletion {
-        name: String::from(name),
-        kind,
-        text: String::from(text.trim()),
-        desc: String::from(desc),
-        valid_parents: vec![],
-    }
+macro_rules! cmp_item {
+    ($name:expr, $kind:expr, $text:expr, $desc:expr) => {
+        NorgCompletion {
+            name: String::from($name),
+            kind: $kind,
+            text: String::from($text.trim()),
+            desc: String::from($desc),
+            valid_parents: vec![],
+        }
+    };
 }
 
 pub static NORG_BLOCKS: OnceLock<Vec<NorgCompletion>> = OnceLock::new();
@@ -28,11 +30,11 @@ pub static NORG_BLOCKS: OnceLock<Vec<NorgCompletion>> = OnceLock::new();
 pub fn init_norg_completion() {
     NORG_BLOCKS
         .set(vec![
-            make_cmp_item(
+            cmp_item!(
                 "code",
                 CompletionItemKind::SNIPPET,
                 include_str!("./blocks/code_text.txt"),
-                include_str!("./blocks/code_desc.md"),
+                include_str!("./blocks/code_desc.md")
             ),
             // TODO: add more
         ])

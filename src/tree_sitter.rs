@@ -1,6 +1,5 @@
 use anyhow::anyhow;
 use lsp_types::Url;
-// use lsp_types::Url;
 use ropey::RopeSlice;
 use tree_sitter::{Node, Query, QueryCursor, TextProvider};
 
@@ -90,13 +89,13 @@ pub struct Link {
 }
 
 impl Link {
-    fn parse_from_node<'a>(node: Node<'_>, text_provider: &'a [u8]) -> Option<Self> {
+    fn parse_from_node<'a>(node: Node<'_>, source: &'a [u8]) -> Option<Self> {
         let destination = node.child_by_field_name("destination")?;
         return Some(Link {
             range: node.range(),
             destination: match destination.kind() {
                 "uri" => {
-                    LinkDestination::Uri(destination.utf8_text(text_provider).unwrap().to_string())
+                    LinkDestination::Uri(destination.utf8_text(source).unwrap().to_string())
                 }
                 "norg_file" => LinkDestination::NorgFile {
                     root: destination
@@ -105,14 +104,14 @@ impl Link {
                             "file_root" => LinkRoot::Root,
                             "current_workspace" => LinkRoot::Current,
                             "workspace" => LinkRoot::Workspace(
-                                node.utf8_text(text_provider).unwrap().to_string(),
+                                node.utf8_text(source).unwrap().to_string(),
                             ),
                             k => unreachable!("invalid root kind: {k}"),
                         }),
                     path: destination
                         .child_by_field_name("path")
                         .unwrap()
-                        .utf8_text(text_provider)
+                        .utf8_text(source)
                         .unwrap()
                         .to_string(),
                 },
@@ -164,7 +163,7 @@ impl<'a> Iterator for ChunksBytes<'a> {
     }
 }
 
-pub struct RopeProvider<'a>(pub RopeSlice<'a>);
+pub struct RopeProvider<'a>(RopeSlice<'a>);
 impl<'a> TextProvider<'a> for RopeProvider<'a> {
     type I = ChunksBytes<'a>;
 
