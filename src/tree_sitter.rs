@@ -120,10 +120,6 @@ impl Link {
             },
         });
     }
-    // TODO: change to `to_location` which returns lsp_types::Location
-    // containing destination Uri and range
-    // Link::get_location(&self, origin: &Url) -> Result<Location>
-    // list_reference_from_location(loc: Location, root: P) -> Vec<Location>
     pub fn get_location(&self, origin: &Url) -> anyhow::Result<lsp_types::Location> {
         Ok(match &self.destination {
             LinkDestination::Uri(uri) => lsp_types::Location {

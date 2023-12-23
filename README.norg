@@ -13,17 +13,19 @@ These are core dependencies for Neorg-language-server that must be completed fir
 - [NorgBerg]{https://github.com/SevorisDoe/Norgberg}
     \: DB for workspaces
 
+Basically most of workspace features are stalled waiting for [NorgBerg].
+
 ** Features
 
-- (x) `documentSymbol` from headings
-- ( ) `workspaceSymbol` from headings
-- ( ) `completion`
+- (x) `textDocument/documentSymbol` from headings
+- ( ) `textDocument/workspaceSymbol` from headings
+- ( ) `textDocument/completion`
 -- link destination
 -- anchor id
 -- snippets
 -- attached/detached modifier extensions
 
-*** ( ) `codeAction`
+*** ( ) `textDocument/codeAction`
 
 -- create file on broken link
 -- move current section to external file
@@ -32,11 +34,18 @@ These are core dependencies for Neorg-language-server that must be completed fir
 
 *** Links
 - ( ) support all linkable types
--- (x) URI
--- ( ) file location
---- (x) basic (e.g. `{:file:}`)
---- ( ) scoping (e.g. `{:file:* heading}`)
--- ( ) scope (line number, detached modifier)
+-- link destination
+--- (x) URI
+---- ( ) support syntax sugars like `{file://~/notes/todo.norg}`
+--- (=) file location
+---- (x) basic (e.g. `{:file:}`)
+---- (=) workspace (e.g. `{:$workspace/file:}`)
+    (waiting for [NorgBerg])
+---- (=) scoping (e.g. `{:file:* heading}`)
+    (waiting for [tree-sitter-norg3])
+--- (=) scope (line number, detached modifier)
+    (waiting for [tree-sitter-norg3])
+-- ( ) alias
 - (x) go to definition
 - (x) go to references
 - ( ) show hover (with norg format? is that even possible?)
