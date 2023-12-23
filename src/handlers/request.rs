@@ -142,18 +142,19 @@ pub fn handle_definition(req: lsp_server::Request) -> Response {
         match link.get_location(&req_uri) {
             Ok(loc) => {
                 let definitions = GotoDefinitionResponse::Scalar(loc);
-                return Response::new_ok(req.id, serde_json::to_value(definitions).unwrap());
+                Response::new_ok(req.id, serde_json::to_value(definitions).unwrap())
             }
             Err(e) => {
-                return Response::new_err(req.id, ErrorCode::RequestFailed as i32, e.to_string());
+                Response::new_err(req.id, ErrorCode::RequestFailed as i32, e.to_string())
             }
         }
+    } else {
+        Response::new_err(
+            req.id,
+            lsp_server::ErrorCode::RequestFailed as i32,
+            "can't find link in request position".to_string(),
+        )
     }
-    return Response::new_err(
-        req.id,
-        lsp_server::ErrorCode::RequestFailed as i32,
-        "can't find link in request position".to_string(),
-    );
 }
 
 pub fn handle_references(config: &Config, req: lsp_server::Request) -> Response {
@@ -172,22 +173,23 @@ pub fn handle_references(config: &Config, req: lsp_server::Request) -> Response 
         match link.get_location(&req_uri) {
             Ok(req_link_loc) => {
                 let references = list_references_from_location(req_link_loc, &root_path);
-                return Response::new_ok(req.id, serde_json::to_value(references).unwrap());
+                Response::new_ok(req.id, serde_json::to_value(references).unwrap())
             }
             Err(e) => {
-                return Response::new_err(
+                Response::new_err(
                     req.id,
                     lsp_server::ErrorCode::RequestFailed as i32,
                     e.to_string(),
-                );
+                )
             }
         }
+    } else {
+        Response::new_err(
+            req.id,
+            lsp_server::ErrorCode::InvalidRequest as i32,
+            "can't find link in request position".to_string(),
+        )
     }
-    return Response::new_err(
-        req.id,
-        lsp_server::ErrorCode::InvalidRequest as i32,
-        "can't find link in request position".to_string(),
-    );
 }
 
 fn list_references_from_location<P: AsRef<Path>>(loc: Location, root: P) -> Vec<Location> {
