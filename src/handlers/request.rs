@@ -119,120 +119,6 @@ fn tree_to_symbols(cursor: &mut ::tree_sitter::TreeCursor, text: &[u8]) -> Vec<D
     return symbols;
 }
 
-#[cfg(test)]
-mod test {
-    use lsp_types::{DocumentSymbol, Position, Range, SymbolKind};
-    use tree_sitter::Parser;
-
-    use super::*;
-
-    #[allow(deprecated)]
-    #[test]
-    fn test_tree_to_sym() {
-        let doc = r#"|example
-* h1eading
-helo
-|end
-* h2eading
-"#;
-        let mut parser = Parser::new();
-        parser
-            .set_language(tree_sitter_norg3::language())
-            .expect("could not load norg parser");
-        let tree = parser.parse(doc, None).expect("get tree");
-        let mut cursor = tree.walk();
-        let symbols = tree_to_symbols(&mut cursor, doc.as_bytes());
-        assert_eq!(
-            vec![
-                DocumentSymbol {
-                    name: "ranged tag".to_string(),
-                    detail: Some("|example\n* h1eading\nhelo\n|end\n".to_string()),
-                    kind: SymbolKind::STRUCT,
-                    tags: None,
-                    deprecated: None,
-                    range: Range {
-                        start: Position {
-                            line: 0,
-                            character: 0,
-                        },
-                        end: Position {
-                            line: 4,
-                            character: 0,
-                        },
-                    },
-                    selection_range: Range {
-                        start: Position {
-                            line: 0,
-                            character: 0,
-                        },
-                        end: Position {
-                            line: 4,
-                            character: 0,
-                        },
-                    },
-                    children: Some(vec![DocumentSymbol {
-                        name: "heading".to_string(),
-                        detail: Some("* h1eading\nhelo\n".to_string()),
-                        kind: SymbolKind::STRUCT,
-                        tags: None,
-                        deprecated: None,
-                        range: Range {
-                            start: Position {
-                                line: 1,
-                                character: 0,
-                            },
-                            end: Position {
-                                line: 3,
-                                character: 0,
-                            },
-                        },
-                        selection_range: Range {
-                            start: Position {
-                                line: 1,
-                                character: 0,
-                            },
-                            end: Position {
-                                line: 3,
-                                character: 0,
-                            },
-                        },
-                        children: None,
-                    }]),
-                },
-                DocumentSymbol {
-                    name: "heading".to_string(),
-                    detail: Some("* h2eading\n".to_string()),
-                    kind: SymbolKind::STRUCT,
-                    tags: None,
-                    deprecated: None,
-                    range: Range {
-                        start: Position {
-                            line: 4,
-                            character: 0,
-                        },
-                        end: Position {
-                            line: 5,
-                            character: 0,
-                        },
-                    },
-                    selection_range: Range {
-                        start: Position {
-                            line: 4,
-                            character: 0,
-                        },
-                        end: Position {
-                            line: 5,
-                            character: 0,
-                        },
-                    },
-                    children: None,
-                },
-            ],
-            symbols
-        );
-    }
-}
-
 pub fn handle_document_symbol(req: lsp_server::Request) -> Response {
     error!("document symbol");
     let params: DocumentSymbolParams = serde_json::from_value(req.params).unwrap();
@@ -259,11 +145,7 @@ pub fn handle_definition(req: lsp_server::Request) -> Response {
                 return Response::new_ok(req.id, serde_json::to_value(definitions).unwrap());
             }
             Err(e) => {
-                return Response::new_err(
-                    req.id,
-                    ErrorCode::RequestFailed as i32,
-                    e.to_string(),
-                );
+                return Response::new_err(req.id, ErrorCode::RequestFailed as i32, e.to_string());
             }
         }
     }
@@ -334,20 +216,116 @@ fn list_references_from_location<P: AsRef<Path>>(loc: Location, root: P) -> Vec<
 }
 
 #[cfg(test)]
-mod test_request {
+mod test {
     use std::path::Path;
+
+    use lsp_types::{Position, Range, SymbolKind};
+    use tree_sitter::Parser;
 
     use super::*;
 
+    macro_rules! url {
+        ($path:expr) => {
+            Url::from_file_path(
+                std::env::current_dir()
+                    .expect("failed to get current dir")
+                    .join($path),
+            )
+            .unwrap()
+        };
+    }
+
+    macro_rules! range {
+        ($sl:expr, $sc:expr, $el:expr, $ec:expr) => {
+            Range::new(Position::new($sl, $sc), Position::new($el, $ec))
+        };
+    }
+
+    #[allow(deprecated)]
     #[test]
-    fn list_references() {
+    fn document_symbols() {
+        let doc = r#"|example
+        * h1eading
+        helo
+        |end
+        * h2eading
+        "#;
+        let mut parser = Parser::new();
+        parser
+            .set_language(tree_sitter_norg3::language())
+            .expect("could not load norg parser");
+        let tree = parser.parse(doc, None).expect("get tree");
+        let mut cursor = tree.walk();
+        let symbols = tree_to_symbols(&mut cursor, doc.as_bytes());
+        assert_eq!(
+            symbols,
+            vec![
+                DocumentSymbol {
+                    name: "ranged tag".to_string(),
+                    detail: Some(
+                        "|example\n        * h1eading\n        helo\n        |end\n".to_string()
+                    ),
+                    kind: SymbolKind::STRUCT,
+                    tags: None,
+                    deprecated: None,
+                    range: range!(0, 0, 4, 0),
+                    selection_range: range!(0, 0, 4, 0),
+                    children: Some(vec![DocumentSymbol {
+                        name: "heading".to_string(),
+                        detail: Some("* h1eading\n        helo\n".to_string()),
+                        kind: SymbolKind::STRUCT,
+                        tags: None,
+                        deprecated: None,
+                        range: range!(1, 8, 3, 0),
+                        selection_range: range!(1, 8, 3, 0),
+                        children: None,
+                    }]),
+                },
+                DocumentSymbol {
+                    name: "heading".to_string(),
+                    detail: Some("* h2eading\n".to_string()),
+                    kind: SymbolKind::STRUCT,
+                    tags: None,
+                    deprecated: None,
+                    range: range!(4, 8, 5, 0),
+                    selection_range: range!(4, 8, 5, 0),
+                    children: None,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn references() {
         structured_logger::Builder::with_level("debug").init();
-        let path = Path::new("test/index.norg");
+        let path = Path::new("test/folder/foo.norg");
         let current_dir = std::env::current_dir().expect("failed to get current dir");
         let location = Location {
             uri: Url::from_file_path(current_dir.join(path)).unwrap(),
             range: Default::default(),
         };
-        list_references_from_location(location, current_dir.join("./test"));
+        let refs = list_references_from_location(location, current_dir.join("./test"));
+        println!("{refs:#?}");
+        assert_eq!(
+            refs,
+            vec![
+                Location {
+                    uri: url!("/home/ubuntu/projects/neorg-ls/test/index.norg"),
+                    range: range!(1, 0, 1, 14),
+                },
+                Location {
+                    uri: url!("/home/ubuntu/projects/neorg-ls/test/index.norg"),
+                    range: range!(10, 2, 10, 16),
+                },
+                Location {
+                    uri: url!("/home/ubuntu/projects/neorg-ls/test/index.norg"),
+                    range: range!(11, 2, 11, 18),
+                },
+                Location {
+                    uri: url!("/home/ubuntu/projects/neorg-ls/test/folder/bar.norg"),
+                    range: range!(0, 0, 0, 7),
+                },
+            ]
+        )
     }
 }
