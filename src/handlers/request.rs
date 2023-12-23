@@ -290,18 +290,18 @@ pub fn handle_references(config: &Config, req: lsp_server::Request) -> Response 
         // HACK: use virtual workspace instead
         #[allow(deprecated)]
         let root_path = &config.init_params.root_path.as_ref().unwrap();
-        if let Ok(req_link_uri) = link.as_uri(&req_uri) {
-            let references: Vec<Location> = list_references_from_uri(req_link_uri, &root_path)
-                .into_iter()
-                .map(|(origin, range)| Location { uri: origin, range })
-                .collect();
-            return Response::new_ok(req.id, serde_json::to_value(references).unwrap());
-        } else {
-            return Response::new_err(
-                req.id,
-                lsp_server::ErrorCode::RequestFailed as i32,
-                "workspace links are not implemented yet".to_string(),
-            );
+        match link.get_location(&req_uri) {
+            Ok(req_link_loc) => {
+                let references = list_references_from_location(req_link_loc, &root_path);
+                return Response::new_ok(req.id, serde_json::to_value(references).unwrap());
+            }
+            Err(_) => {
+                return Response::new_err(
+                    req.id,
+                    lsp_server::ErrorCode::RequestFailed as i32,
+                    "workspace links are not implemented yet".to_string(),
+                );
+            }
         }
     }
     return Response::new_err(
@@ -311,7 +311,7 @@ pub fn handle_references(config: &Config, req: lsp_server::Request) -> Response 
     );
 }
 
-fn list_references_from_uri<P: AsRef<Path>>(uri: Url, root: P) -> Vec<(Url, lsp_types::Range)> {
+fn list_references_from_location<P: AsRef<Path>>(loc: Location, root: P) -> Vec<Location> {
     // TODO: generalize with crate::workspace::Workspace::iter_documents()
     WalkDir::new(root)
         .into_iter()
@@ -320,21 +320,19 @@ fn list_references_from_uri<P: AsRef<Path>>(uri: Url, root: P) -> Vec<(Url, lsp_
             let path = entry.path();
             if path.extension()? == "norg" {
                 let url = Url::from_file_path(path.to_owned()).ok()?;
-                return Document::from_path(path)
-                    .ok()
-                    .map(|d| (url, d));
+                return Document::from_path(path).ok().map(|d| (url, d));
             }
             None
         })
         .flat_map(|(path, d)| d.links.into_iter().map(move |l| (path.clone(), l)))
-        .filter(|(origin, link)| {
-            if let Ok(link_uri) = link.as_uri(origin) {
-                uri == link_uri
-            } else {
-                false
-            }
+        .filter(|(origin, link)| match link.get_location(origin) {
+            Ok(link_loc) => link_loc == loc,
+            Err(_) => false,
         })
-        .map(|(path, l)| (path, l.range.as_lsp_range()))
+        .map(|(path, l)| lsp_types::Location {
+            uri: path,
+            range: l.range.as_lsp_range(),
+        })
         .collect()
 }
 
@@ -349,9 +347,10 @@ mod test_request {
         structured_logger::Builder::with_level("debug").init();
         let path = Path::new("test/index.norg");
         let current_dir = std::env::current_dir().expect("failed to get current dir");
-        list_references_from_uri(
-            Url::from_file_path(current_dir.join(path)).unwrap(),
-            current_dir.join("./test"),
-        );
+        let location = Location {
+            uri: Url::from_file_path(current_dir.join(path)).unwrap(),
+            range: Default::default(),
+        };
+        list_references_from_location(location, current_dir.join("./test"));
     }
 }

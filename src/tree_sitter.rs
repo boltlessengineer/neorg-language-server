@@ -120,6 +120,36 @@ impl Link {
             },
         });
     }
+    // TODO: change to `to_location` which returns lsp_types::Location
+    // containing destination Uri and range
+    // Link::get_location(&self, origin: &Url) -> Result<Location>
+    // list_reference_from_location(loc: Location, root: P) -> Vec<Location>
+    pub fn get_location(&self, origin: &Url) -> anyhow::Result<lsp_types::Location> {
+        Ok(match &self.destination {
+            LinkDestination::Uri(uri) => lsp_types::Location {
+                uri: Url::parse(&uri)?,
+                range: Default::default(),
+            },
+            LinkDestination::NorgFile { root, path } => {
+                let path = if path.ends_with(".norg") {
+                    path.to_owned()
+                } else {
+                    path.to_owned() + ".norg"
+                };
+                let uri = match root {
+                    LinkRoot::None => origin.join(&path)?,
+                    LinkRoot::Root => Url::parse(&format!("file:///{}", &path))?,
+                    LinkRoot::Workspace(_) | LinkRoot::Current => {
+                        return Err(anyhow!("workspace links are not implemented yet"))
+                    }
+                };
+                lsp_types::Location {
+                    uri,
+                    range: Default::default(),
+                }
+            }
+        })
+    }
     pub fn as_uri(&self, origin: &Url) -> anyhow::Result<Url> {
         // join origin+self.path & make a Url
         // should return Result<Url> because parsing as Url might fail
