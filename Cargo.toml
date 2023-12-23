@@ -1,7 +1,11 @@
 [package]
 name = "neorg-language-server"
+description = "Language Server for Neorg"
 version = "0.1.0"
 edition = "2021"
+license = "GPL-3.0"
+license_file = "LICENSE"
+repository = "https://github.com/boltlessengineer/neorg-language-server"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
