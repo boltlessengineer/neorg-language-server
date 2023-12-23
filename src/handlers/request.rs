@@ -305,10 +305,16 @@ mod test {
             uri: Url::from_file_path(current_dir.join(path)).unwrap(),
             range: Default::default(),
         };
-        let refs = list_references_from_location(location, current_dir.join("./test"));
+        let mut refs = list_references_from_location(location, current_dir.join("./test"));
+        // sort because file iterator might differ by environment
+        refs.sort_by_key(|loc| format!("{loc:?}"));
         assert_eq!(
             refs,
             vec![
+                Location {
+                    uri: url!("test/folder/bar.norg"),
+                    range: range!(0, 0, 0, 7),
+                },
                 // FIXME: first link should be invalid
                 // but currently no way to capture nested node with tree-sitter queries
                 // see: https://github.com/tree-sitter/tree-sitter/issues/880
@@ -324,10 +330,6 @@ mod test {
                 Location {
                     uri: url!("test/index.norg"),
                     range: range!(11, 2, 11, 18),
-                },
-                Location {
-                    uri: url!("test/folder/bar.norg"),
-                    range: range!(0, 0, 0, 7),
                 },
             ]
         )
