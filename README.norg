@@ -9,23 +9,22 @@
 These are core dependencies for Neorg-language-server that must be completed first.
 
 - [tree-sitter-norg3]{https://github.com/nvim-neorg/tree-sitter-norg3}
-    : parser for Norg syntax
+    \: parser for Norg syntax
 - [NorgBerg]{https://github.com/SevorisDoe/Norgberg}
-    : DB for workspaces
+    \: DB for workspaces
 
 ** Features
 
-- (x) `textDocument/documentSymbol`
-- ( ) `textDocument/workspaceSymbol` : list workspace files. (useful for editors that can't have Neorg-plugin support. e.g. Helix)
-- ( ) `textDocument/foldingRange`
-- ( ) `textDocument/selectionRange`
-- ( ) `textDocument/completion`
--- ( ) link destination/anchor id
--- ( ) snippets
---- (x) basic snippet implementation
---- ( ) suggest snippets by context
--- ( ) attached/detached modifier extensions or tag params
-- ( ) code action
+- (x) `documentSymbol` from headings
+- (x) `workspaceSymbol` from headings
+- ( ) `completion`
+-- link destination
+-- anchor id
+-- snippets
+-- attached/detached modifier extensions
+
+*** ( ) `codeAction`
+
 -- create file on broken link
 -- move current section to external file
 -- move current nestable list section to structural section
@@ -38,6 +37,10 @@ These are core dependencies for Neorg-language-server that must be completed fir
 - ( ) completion for link destination
 - ( ) diagnostic for broken links
 - ( ) notify existing references on new file
+
+*** misc
+- ( ) `textDocument/foldingRange`
+- ( ) `textDocument/selectionRange`
 
 *** format
 
