@@ -198,7 +198,8 @@ fn list_references_from_location(loc: Location) -> Vec<Location> {
             let url = Url::from_file_path(&path).ok()?;
             let doc_store = DOC_STORE.get().unwrap().lock().unwrap();
             // TODO: push document created from path to DOC_STORE
-            doc_store.get(&url)
+            doc_store
+                .get(&url)
                 .map(|d| d.clone())
                 .or(Document::from_path(&path).ok())
                 .map(|d| (url, d))
@@ -220,7 +221,7 @@ mod test {
     use lsp_types::{Position, Range, SymbolKind};
     use tree_sitter::Parser;
 
-    use crate::{workspace::init_worksapce, document::init_doc_store};
+    use crate::{document::init_doc_store, workspace::init_worksapce};
 
     use super::*;
 
