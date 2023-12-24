@@ -5,12 +5,13 @@ use std::{
 };
 
 use log::error;
+use lsp_types::Url;
 use ropey::Rope;
 use tree_sitter::{InputEdit, Parser, Tree};
 
 use crate::tree_sitter::{capture_links, Link};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Document {
     pub text: Rope,
     pub tree: Tree,
@@ -95,7 +96,7 @@ impl Document {
     }
 }
 
-pub static DOC_STORE: OnceLock<Arc<Mutex<HashMap<String, Document>>>> = OnceLock::new();
+pub static DOC_STORE: OnceLock<Arc<Mutex<HashMap<Url, Document>>>> = OnceLock::new();
 
 pub fn init_doc_store() {
     DOC_STORE.set(Arc::new(Mutex::new(HashMap::new()))).unwrap();

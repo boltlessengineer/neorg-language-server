@@ -55,7 +55,7 @@ pub fn new_norg3_query(source: &str) -> Query {
     Query::new(tree_sitter_norg3::language(), source).expect("can't generate query")
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LinkDestination {
     Uri(String),
     NorgFile {
@@ -67,19 +67,18 @@ pub enum LinkDestination {
     Scope(Vec<LinkScope>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LinkRoot {
     Current,
     Workspace(String),
     Root,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LinkScope;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Link {
-    #[allow(dead_code)]
     pub range: tree_sitter::Range,
     pub destination: LinkDestination,
     // pub origin: Url,

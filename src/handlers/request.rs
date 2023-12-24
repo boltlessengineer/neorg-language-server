@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use log::{debug, error};
 use lsp_server::Response;
 use lsp_types::{
@@ -7,18 +5,18 @@ use lsp_types::{
     Documentation, GotoDefinitionParams, GotoDefinitionResponse, InsertTextFormat, Location,
     ReferenceParams, Url,
 };
-use walkdir::WalkDir;
 
 use crate::{
     config::Config,
     document::{Document, DOC_STORE},
     norg::NORG_BLOCKS,
     tree_sitter::ToLspRange,
+    workspace::WS_MANAGER,
 };
 
 pub fn handle_completion(req: lsp_server::Request) -> Response {
     let params: CompletionParams = serde_json::from_value(req.params).unwrap();
-    let uri = params.text_document_position.text_document.uri.to_string();
+    let uri = params.text_document_position.text_document.uri;
     let pos = params.text_document_position.position;
     error!("pos: {pos:?}");
     let doc_store = DOC_STORE.get().unwrap().lock().unwrap();
@@ -121,7 +119,7 @@ fn tree_to_symbols(cursor: &mut ::tree_sitter::TreeCursor, text: &[u8]) -> Vec<D
 pub fn handle_document_symbol(req: lsp_server::Request) -> Response {
     error!("document symbol");
     let params: DocumentSymbolParams = serde_json::from_value(req.params).unwrap();
-    let uri = params.text_document.uri.to_string();
+    let uri = params.text_document.uri;
     let doc_store = DOC_STORE.get().unwrap().lock().unwrap();
     let doc = doc_store.get(&uri).unwrap();
     let doc_text = doc.text.to_string();
@@ -135,7 +133,7 @@ pub fn handle_definition(req: lsp_server::Request) -> Response {
     let req_uri = params.text_document_position_params.text_document.uri;
     let req_pos = params.text_document_position_params.position;
     let doc_store = DOC_STORE.get().unwrap().lock().unwrap();
-    let doc = doc_store.get(&req_uri.to_string()).unwrap();
+    let doc = doc_store.get(&req_uri).unwrap();
     if let Some(link) = doc.get_link_from_pos(req_pos) {
         debug!("{link:?}");
         match link.get_location(&req_uri) {
@@ -158,21 +156,21 @@ pub fn handle_definition(req: lsp_server::Request) -> Response {
     }
 }
 
-pub fn handle_references(config: &Config, req: lsp_server::Request) -> Response {
+pub fn handle_references(_config: &Config, req: lsp_server::Request) -> Response {
     let params: ReferenceParams = serde_json::from_value(req.params).unwrap();
     let req_uri = params.text_document_position.text_document.uri;
     let req_pos = params.text_document_position.position;
-    let doc_store = DOC_STORE.get().unwrap().lock().unwrap();
-    let doc = doc_store.get(&req_uri.to_string()).unwrap();
-    if let Some(link) = doc.get_link_from_pos(req_pos) {
-        // walk through directory and parse all documents, capture links
-        // filter link by destination
+    let link_from_pos = {
+        // access DOC_STORE from scope to prevent deadlock
+        let doc_store = DOC_STORE.get().unwrap().lock().unwrap();
+        let doc = doc_store.get(&req_uri).unwrap();
+        doc.get_link_from_pos(req_pos)
+    };
+    if let Some(link) = link_from_pos {
         error!("{link:?}");
-        // HACK: use virtual workspace instead
-        let root_path = config.init_params.root_uri.as_ref().unwrap().path();
         match link.get_location(&req_uri) {
             Ok(req_link_loc) => {
-                let references = list_references_from_location(req_link_loc, &root_path);
+                let references = list_references_from_location(req_link_loc);
                 Response::new_ok(req.id, serde_json::to_value(references).unwrap())
             }
             Err(e) => Response::new_err(
@@ -190,20 +188,22 @@ pub fn handle_references(config: &Config, req: lsp_server::Request) -> Response 
     }
 }
 
-fn list_references_from_location<P: AsRef<Path>>(loc: Location, root: P) -> Vec<Location> {
-    // TODO: generalize with crate::workspace::Workspace::iter_documents()
-    WalkDir::new(root)
+fn list_references_from_location(loc: Location) -> Vec<Location> {
+    let dirman = WS_MANAGER.get().unwrap().lock().unwrap();
+    dirman
+        .get_current_workspace()
+        .files()
         .into_iter()
-        .filter_map(|e| e.ok())
-        .filter_map(|entry| {
-            let path = entry.path();
-            if path.extension()? == "norg" {
-                let url = Url::from_file_path(path.to_owned()).ok()?;
-                return Document::from_path(path).ok().map(|d| (url, d));
-            }
-            None
+        .filter_map(|path| {
+            let url = Url::from_file_path(&path).ok()?;
+            let doc_store = DOC_STORE.get().unwrap().lock().unwrap();
+            // TODO: push document created from path to DOC_STORE
+            doc_store.get(&url)
+                .map(|d| d.clone())
+                .or(Document::from_path(&path).ok())
+                .map(|d| (url, d))
         })
-        .flat_map(|(path, d)| d.links.into_iter().map(move |l| (path.clone(), l)))
+        .flat_map(|(url, d)| d.links.into_iter().map(move |l| (url.clone(), l)))
         .filter(|(origin, link)| match link.get_location(origin) {
             Ok(link_loc) => link_loc == loc,
             Err(_) => false,
@@ -217,10 +217,10 @@ fn list_references_from_location<P: AsRef<Path>>(loc: Location, root: P) -> Vec<
 
 #[cfg(test)]
 mod test {
-    use std::path::Path;
-
     use lsp_types::{Position, Range, SymbolKind};
     use tree_sitter::Parser;
+
+    use crate::{workspace::init_worksapce, document::init_doc_store};
 
     use super::*;
 
@@ -298,13 +298,14 @@ mod test {
     #[test]
     fn references() {
         // structured_logger::Builder::with_level("debug").init();
-        let path = Path::new("test/folder/foo.norg");
         let current_dir = std::env::current_dir().expect("failed to get current dir");
+        init_doc_store();
+        init_worksapce(current_dir.join("./test"));
         let location = Location {
-            uri: Url::from_file_path(current_dir.join(path)).unwrap(),
+            uri: Url::from_file_path(current_dir.join("test/folder/foo.norg")).unwrap(),
             range: Default::default(),
         };
-        let mut refs = list_references_from_location(location, current_dir.join("./test"));
+        let mut refs = list_references_from_location(location);
         // sort because file iterator might differ by environment
         refs.sort_by_key(|loc| format!("{loc:?}"));
         assert_eq!(

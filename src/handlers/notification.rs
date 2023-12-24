@@ -10,10 +10,7 @@ pub fn handle_did_open(params: serde_json::Value) {
     if let Ok(params) = serde_json::from_value::<DidOpenTextDocumentParams>(params) {
         let text_document = params.text_document;
         let mut doc_store = DOC_STORE.get().unwrap().lock().unwrap();
-        doc_store.insert(
-            text_document.uri.to_string(),
-            Document::new(&text_document.text),
-        );
+        doc_store.insert(text_document.uri, Document::new(&text_document.text));
     }
 }
 
@@ -23,8 +20,9 @@ pub fn handle_did_change(params: serde_json::Value) {
         let text_document = params.text_document;
         let changes = params.content_changes;
         let mut doc_store = DOC_STORE.get().unwrap().lock().unwrap();
-        let uri = text_document.uri.to_string();
-        let doc = doc_store.get_mut(&uri).expect("can't find document");
+        let doc = doc_store
+            .get_mut(&text_document.uri)
+            .expect("can't find document");
         changes.iter().for_each(|change| {
             if let Some(range) = change.range {
                 doc.change_range(range, &change.text);
@@ -39,7 +37,6 @@ pub fn handle_did_close(params: serde_json::Value) {
     if let Ok(params) = serde_json::from_value::<DidCloseTextDocumentParams>(params) {
         let text_document = params.text_document;
         let mut doc_store = DOC_STORE.get().unwrap().lock().unwrap();
-        let uri = text_document.uri.to_string();
-        doc_store.remove(&uri);
+        doc_store.remove(&text_document.uri);
     }
 }

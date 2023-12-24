@@ -14,6 +14,7 @@ anyhow = "1.0.75"
 log = "0.4.20"
 lsp-server = "0.7.4"
 lsp-types = "0.95.0"
+neorg-dirman = { git = "https://github.com/boltlessengineer/neorg-dirman", branch = "pr1" }
 rayon = "1.8.0"
 ropey = "1.6.1"
 serde = "1.0.193"
