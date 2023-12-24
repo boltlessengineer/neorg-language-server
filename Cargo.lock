@@ -809,6 +809,7 @@ dependencies = [
 [[package]]
 name = "tree-sitter-norg3"
 version = "0.0.1"
+source = "git+https://github.com/boltlessengineer/tree-sitter-norg3-pr1?branch=paragraph_break#48f328aee6e4ca2e9955ac154d580dcbfb4d4a4a"
 dependencies = [
  "cc",
  "tree-sitter",
