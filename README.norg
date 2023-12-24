@@ -51,7 +51,9 @@ Basically most of workspace features are stalled waiting for [NorgBerg].
 - ( ) show hover (with norg format? is that even possible?)
 - ( ) completion for link destination
 - ( ) diagnostic for broken links
-- ( ) update on file rename
+- ( ) update on file rename (`textDocument/willRenameFiles`)
+-- (x) URI type
+-- (=) norg link type (with proper workspace id)
 - ( ) notify existing references on new file
 
 *** misc

@@ -11,8 +11,10 @@ use anyhow::Result;
 use log::{error, warn};
 use lsp_server::{Connection, Message};
 use lsp_types::{
-    CompletionOptions, InitializeParams, OneOf, ServerCapabilities, TextDocumentSyncCapability,
-    TextDocumentSyncKind, WorkDoneProgressOptions,
+    CompletionOptions, FileOperationFilter, FileOperationPattern, FileOperationRegistrationOptions,
+    InitializeParams, OneOf, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
+    WorkDoneProgressOptions, WorkspaceFileOperationsServerCapabilities,
+    WorkspaceFoldersServerCapabilities, WorkspaceServerCapabilities,
 };
 use structured_logger::{json::new_writer, Builder};
 
@@ -69,6 +71,35 @@ fn main() -> Result<()> {
         definition_provider: Some(OneOf::Left(true)),
         references_provider: Some(OneOf::Left(true)),
         document_symbol_provider: Some(OneOf::Left(true)),
+        workspace: Some(WorkspaceServerCapabilities {
+            workspace_folders: Some(WorkspaceFoldersServerCapabilities {
+                supported: Some(true),
+                ..Default::default()
+            }),
+            file_operations: Some(WorkspaceFileOperationsServerCapabilities {
+                will_rename: Some(FileOperationRegistrationOptions {
+                    filters: vec![
+                        FileOperationFilter {
+                            pattern: FileOperationPattern {
+                                glob: "*.norg".to_string(),
+                                matches: None,
+                                options: None,
+                            },
+                            scheme: None,
+                        },
+                        FileOperationFilter {
+                            pattern: FileOperationPattern {
+                                glob: "**/*.norg".to_string(),
+                                matches: None,
+                                options: None,
+                            },
+                            scheme: None,
+                        },
+                    ],
+                }),
+                ..Default::default()
+            }),
+        }),
         ..Default::default()
     })
     .unwrap();

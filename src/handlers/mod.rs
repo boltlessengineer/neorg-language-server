@@ -1,19 +1,26 @@
+use log::error;
+
 use crate::config::Config;
 
 use self::{
     notification::{handle_did_change, handle_did_close, handle_did_open},
-    request::{handle_completion, handle_definition, handle_document_symbol, handle_references},
+    request::{
+        handle_completion, handle_definition, handle_document_symbol, handle_references,
+        handle_will_rename_files,
+    },
 };
 
 mod notification;
 mod request;
 
 pub fn handle_req(config: &Config, req: lsp_server::Request) -> Option<lsp_server::Response> {
+    error!("{}", req.method);
     match req.method.as_str() {
         "textDocument/completion" => Some(handle_completion(req)),
         "textDocument/documentSymbol" => Some(handle_document_symbol(req)),
         "textDocument/definition" => Some(handle_definition(req)),
         "textDocument/references" => Some(handle_references(config, req)),
+        "workspace/willRenameFiles" => Some(handle_will_rename_files(req)),
         _ => None,
     }
 }

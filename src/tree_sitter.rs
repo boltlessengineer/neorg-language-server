@@ -80,8 +80,69 @@ pub struct LinkScope;
 #[derive(Debug, Clone)]
 pub struct Link {
     pub range: tree_sitter::Range,
+    pub dest_range: tree_sitter::Range,
     pub destination: LinkDestination,
     // pub origin: Url,
+}
+
+impl ToString for LinkRoot {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Current => "$/".to_owned(),
+            Self::Workspace(workspace) => format!("!${workspace}/"),
+            Self::Root => "/".to_owned(),
+        }
+    }
+}
+
+impl ToString for LinkScope {
+    fn to_string(&self) -> String {
+        todo!()
+    }
+}
+
+#[allow(unused_variables)]
+impl ToString for LinkDestination {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Uri(uri) => uri.to_owned(),
+            Self::NorgFile { root, path, scope } => {
+                let root = root.as_ref().map_or("".to_owned(), |r| r.to_string());
+                root + path
+                    + &scope
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect::<Vec<String>>()
+                        .join(":")
+            }
+            Self::Scope(scope) => scope
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<String>>()
+                .join(":"),
+        }
+    }
+}
+
+impl LinkDestination {
+    pub fn update_uri(&mut self, new_uri: &str) -> anyhow::Result<()> {
+        match self {
+            Self::Uri(uri) => {
+                *uri = new_uri.to_owned();
+                Ok(())
+            }
+            #[allow(unused_variables)]
+            Self::NorgFile { root, path, scope } => {
+                // TODO:
+                // 1. find workspace and relative path of `new_uri` from dirman
+                // 2. update `root` and `path` with result
+                // Url::parse(&new_uri).unwrap().path().starts_with(new_uri);
+                todo!("update norg_file type link destination")
+            }
+            // Self::Scope(_) => Err(LinkDestUpdateErr::CantFindWorkspace),
+            Self::Scope(_) => Err(anyhow!("Link has no path value")),
+        }
+    }
 }
 
 impl Link {
@@ -89,6 +150,7 @@ impl Link {
         let destination = node.child_by_field_name("destination")?;
         return Some(Link {
             range: node.range(),
+            dest_range: destination.range(),
             destination: match destination.kind() {
                 "uri" => LinkDestination::Uri(destination.utf8_text(source).unwrap().to_string()),
                 "norg_file" => LinkDestination::NorgFile {
@@ -114,6 +176,7 @@ impl Link {
             },
         });
     }
+    // TODO: move to `LinkDestination`
     pub fn get_location(&self, origin: &Url) -> anyhow::Result<lsp_types::Location> {
         Ok(match &self.destination {
             LinkDestination::Uri(uri) => lsp_types::Location {

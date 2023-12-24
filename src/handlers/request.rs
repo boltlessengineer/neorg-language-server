@@ -1,16 +1,18 @@
+use std::collections::HashMap;
+
 use log::{debug, error};
 use lsp_server::Response;
 use lsp_types::{
     CompletionItem, CompletionList, CompletionParams, DocumentSymbol, DocumentSymbolParams,
     Documentation, GotoDefinitionParams, GotoDefinitionResponse, InsertTextFormat, Location,
-    ReferenceParams, Url,
+    ReferenceParams, RenameFilesParams, Url,
 };
 
 use crate::{
     config::Config,
     document::{Document, DOC_STORE},
     norg::NORG_BLOCKS,
-    tree_sitter::ToLspRange,
+    tree_sitter::{Link, ToLspRange},
     workspace::WS_MANAGER,
 };
 
@@ -214,6 +216,54 @@ fn list_references_from_location(loc: Location) -> Vec<Location> {
             range: l.range.as_lsp_range(),
         })
         .collect()
+}
+
+fn iter_links() -> impl Iterator<Item = (Url, Link)> {
+    let dirman = WS_MANAGER.get().unwrap().lock().unwrap();
+    dirman
+        .get_current_workspace()
+        .files()
+        .into_iter()
+        .filter_map(|path| {
+            let url = Url::from_file_path(&path).ok()?;
+            let doc_store = DOC_STORE.get().unwrap().lock().unwrap();
+            // TODO: push document created from path to DOC_STORE
+            doc_store
+                .get(&url)
+                .map(|d| d.clone())
+                .or(Document::from_path(&path).ok())
+                .map(|d| (url, d))
+        })
+        .flat_map(|(url, d)| d.links.into_iter().map(move |l| (url.clone(), l)))
+}
+
+pub fn handle_will_rename_files(req: lsp_server::Request) -> Response {
+    error!("willrename");
+    let params: RenameFilesParams = serde_json::from_value(req.params).unwrap();
+    let mut changes: HashMap<Url, Vec<lsp_types::TextEdit>> = HashMap::new();
+    params.files.iter().for_each(|file_rename| {
+        iter_links()
+            .filter(|(url, link)| match link.get_location(url) {
+                Ok(loc) => loc.uri.to_string() == file_rename.old_uri,
+                Err(_) => false,
+            })
+            .for_each(|(link_origin, link)| {
+                let mut new_dest = link.destination;
+                new_dest.update_uri(&file_rename.new_uri).unwrap();
+                let textedit =
+                    lsp_types::TextEdit::new(link.dest_range.as_lsp_range(), new_dest.to_string());
+                error!("{textedit:?}");
+                changes
+                    .entry(link_origin)
+                    .and_modify(|v| v.push(textedit.clone()))
+                    .or_insert(vec![textedit]);
+            });
+    });
+    let workspace_edit = lsp_types::WorkspaceEdit {
+        changes: Some(changes),
+        ..Default::default()
+    };
+    Response::new_ok(req.id, serde_json::to_value(workspace_edit).unwrap())
 }
 
 #[cfg(test)]
