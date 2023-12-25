@@ -143,6 +143,37 @@ impl LinkDestination {
             Self::Scope(_) => Err(anyhow!("Link has no path value")),
         }
     }
+    pub fn get_location(&self, origin: &Url) -> anyhow::Result<lsp_types::Location> {
+        Ok(match &self {
+            Self::Uri(uri) => lsp_types::Location {
+                uri: Url::parse(&uri)?,
+                range: Default::default(),
+            },
+            Self::NorgFile {
+                root,
+                path,
+                scope: _,
+            } => {
+                let path = if path.ends_with(".norg") {
+                    path.to_owned()
+                } else {
+                    path.to_owned() + ".norg"
+                };
+                let uri = match root {
+                    None => origin.join(&path)?,
+                    Some(LinkRoot::Root) => Url::parse(&format!("file:///{}", &path))?,
+                    Some(LinkRoot::Workspace(_)) | Some(LinkRoot::Current) => {
+                        return Err(anyhow!("workspace links are not implemented yet"))
+                    }
+                };
+                lsp_types::Location {
+                    uri,
+                    range: Default::default(),
+                }
+            }
+            Self::Scope(_) => unimplemented!("scope is not implemented yet"),
+        })
+    }
 }
 
 impl Link {
@@ -175,38 +206,6 @@ impl Link {
                 t => todo!("unsupported link type: {t}"),
             },
         });
-    }
-    // TODO: move to `LinkDestination`
-    pub fn get_location(&self, origin: &Url) -> anyhow::Result<lsp_types::Location> {
-        Ok(match &self.destination {
-            LinkDestination::Uri(uri) => lsp_types::Location {
-                uri: Url::parse(&uri)?,
-                range: Default::default(),
-            },
-            LinkDestination::NorgFile {
-                root,
-                path,
-                scope: _,
-            } => {
-                let path = if path.ends_with(".norg") {
-                    path.to_owned()
-                } else {
-                    path.to_owned() + ".norg"
-                };
-                let uri = match root {
-                    None => origin.join(&path)?,
-                    Some(LinkRoot::Root) => Url::parse(&format!("file:///{}", &path))?,
-                    Some(LinkRoot::Workspace(_)) | Some(LinkRoot::Current) => {
-                        return Err(anyhow!("workspace links are not implemented yet"))
-                    }
-                };
-                lsp_types::Location {
-                    uri,
-                    range: Default::default(),
-                }
-            }
-            LinkDestination::Scope(_) => unimplemented!("scope is not implemented yet"),
-        })
     }
 }
 
@@ -265,8 +264,7 @@ impl Document {
         &self,
         pos: P,
         kind: &str,
-        // TODO: Vec instead of Option
-        until: Option<&str>,
+        until: Vec<&str>,
     ) -> Option<Node<'_>> {
         let current_node = self.get_named_node_from_pos(pos)?;
         let mut cursor = current_node.walk();
@@ -274,10 +272,10 @@ impl Document {
             if cursor.node().kind() == kind {
                 return Some(cursor.node());
             }
-            // HACK: `!cursor.goto_parent()` doesn't work on node as field content
-            if until == Some(cursor.node().kind()) {
+            if until.contains(&cursor.node().kind()) {
                 break;
             }
+            // HACK: `!cursor.goto_parent()` doesn't work on node as field content
             if let Some(parent) = cursor.node().parent() {
                 cursor = parent.walk();
             } else {
@@ -287,7 +285,7 @@ impl Document {
         None
     }
     pub fn get_link_from_pos<P: PositionTrait>(&self, pos: P) -> Option<Link> {
-        let node = self.get_kind_node_from_pos(pos, "link", Some("paragraph"))?;
+        let node = self.get_kind_node_from_pos(pos, "link", vec!["paragraph"])?;
         return Link::parse_from_node(node, self.text.to_string().as_bytes());
     }
 }

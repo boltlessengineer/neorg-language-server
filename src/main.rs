@@ -45,7 +45,6 @@ fn main_loop(connection: Connection, config: &Config) -> Result<()> {
 fn main() -> Result<()> {
     init_norg_completion();
     init_doc_store();
-    // TODO: init_workspace();
     let log_file = File::options()
         .create(true)
         .append(true)

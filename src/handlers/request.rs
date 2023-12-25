@@ -138,7 +138,7 @@ pub fn handle_definition(req: lsp_server::Request) -> Response {
     let doc = doc_store.get(&req_uri).unwrap();
     if let Some(link) = doc.get_link_from_pos(req_pos) {
         debug!("{link:?}");
-        match link.get_location(&req_uri) {
+        match link.destination.get_location(&req_uri) {
             Ok(loc) => {
                 let definitions = GotoDefinitionResponse::Scalar(loc);
                 Response::new_ok(req.id, serde_json::to_value(definitions).unwrap())
@@ -170,7 +170,7 @@ pub fn handle_references(_config: &Config, req: lsp_server::Request) -> Response
     };
     if let Some(link) = link_from_pos {
         error!("{link:?}");
-        match link.get_location(&req_uri) {
+        match link.destination.get_location(&req_uri) {
             Ok(req_link_loc) => {
                 let references = list_references_from_location(req_link_loc);
                 Response::new_ok(req.id, serde_json::to_value(references).unwrap())
@@ -191,23 +191,8 @@ pub fn handle_references(_config: &Config, req: lsp_server::Request) -> Response
 }
 
 fn list_references_from_location(loc: Location) -> Vec<Location> {
-    let dirman = WS_MANAGER.get().unwrap().lock().unwrap();
-    dirman
-        .get_current_workspace()
-        .files()
-        .into_iter()
-        .filter_map(|path| {
-            let url = Url::from_file_path(&path).ok()?;
-            let doc_store = DOC_STORE.get().unwrap().lock().unwrap();
-            // TODO: push document created from path to DOC_STORE
-            doc_store
-                .get(&url)
-                .map(|d| d.clone())
-                .or(Document::from_path(&path).ok())
-                .map(|d| (url, d))
-        })
-        .flat_map(|(url, d)| d.links.into_iter().map(move |l| (url.clone(), l)))
-        .filter(|(origin, link)| match link.get_location(origin) {
+    iter_links()
+        .filter(|(origin, link)| match link.destination.get_location(origin) {
             Ok(link_loc) => link_loc == loc,
             Err(_) => false,
         })
@@ -243,7 +228,7 @@ pub fn handle_will_rename_files(req: lsp_server::Request) -> Response {
     let mut changes: HashMap<Url, Vec<lsp_types::TextEdit>> = HashMap::new();
     params.files.iter().for_each(|file_rename| {
         iter_links()
-            .filter(|(url, link)| match link.get_location(url) {
+            .filter(|(url, link)| match link.destination.get_location(url) {
                 Ok(loc) => loc.uri.to_string() == file_rename.old_uri,
                 Err(_) => false,
             })
