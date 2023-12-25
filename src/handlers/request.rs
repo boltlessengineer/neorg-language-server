@@ -288,7 +288,7 @@ mod test {
         "#;
         let mut parser = Parser::new();
         parser
-            .set_language(tree_sitter_norg3::language())
+            .set_language(tree_sitter_norg::language())
             .expect("could not load norg parser");
         let tree = parser.parse(doc, None).expect("get tree");
         let mut cursor = tree.walk();

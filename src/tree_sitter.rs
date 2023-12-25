@@ -52,7 +52,7 @@ impl ToLspRange for tree_sitter::Range {
 }
 
 pub fn new_norg3_query(source: &str) -> Query {
-    Query::new(tree_sitter_norg3::language(), source).expect("can't generate query")
+    Query::new(tree_sitter_norg::language(), source).expect("can't generate query")
 }
 
 #[derive(Debug, Clone)]
@@ -313,7 +313,7 @@ mod test {
         );
         let mut parser = Parser::new();
         parser
-            .set_language(tree_sitter_norg3::language())
+            .set_language(tree_sitter_norg::language())
             .expect("could not load norg parser");
         let tree = parser.parse(&doc_str, None).expect("get tree");
         let root = tree.root_node();

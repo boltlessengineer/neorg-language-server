@@ -14,10 +14,16 @@ anyhow = "1.0.75"
 log = "0.4.20"
 lsp-server = "0.7.4"
 lsp-types = "0.95.0"
-neorg-dirman = { git = "https://github.com/boltlessengineer/neorg-dirman", branch = "pr1" }
+# neorg-dirman = { version = "0.1.1", path = "./crates/dirman" }
 ropey = "1.6.1"
 serde = "1.0.193"
 serde_json = "1.0.108"
 structured-logger = "1.0.3"
 tree-sitter = "0.20.10"
-tree-sitter-norg3 = { git = "https://github.com/boltlessengineer/tree-sitter-norg3-pr1", branch = "paragraph_break" }
+# tree-sitter-norg's version is "0" to match v1 and v3 version
+tree-sitter-norg = "0"
+walkdir = "2.4.0"
+
+# dirty temporary fix until tree-sitter-norg3 is completed
+[patch.crates-io]
+tree-sitter-norg = { git = "https://github.com/boltlessengineer/tree-sitter-norg3-pr1", branch = "paragraph_break" }
