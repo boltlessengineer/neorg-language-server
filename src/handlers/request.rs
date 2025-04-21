@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use log::{debug, error};
+use log::error;
 use lsp_server::Response;
 use lsp_types::{
     CompletionItem, CompletionList, CompletionParams, DocumentSymbol, DocumentSymbolParams,
@@ -192,13 +192,14 @@ pub fn handle_references(_config: &Config, req: lsp_server::Request) -> Response
 
 fn list_references_from_location(loc: Location) -> Vec<Location> {
     iter_links()
-        .filter(|(origin, link)| match link.destination.get_location(origin) {
-            Ok(link_loc) => link_loc == loc,
-            Err(_) => false,
+        .filter(|(origin, link)| {
+            link.destination
+                .get_location(origin)
+                .is_ok_and(|link_loc| link_loc == loc)
         })
-        .map(|(path, l)| lsp_types::Location {
-            uri: path,
-            range: l.range.as_lsp_range(),
+        .map(|(uri, link)| lsp_types::Location {
+            uri,
+            range: link.range.as_lsp_range(),
         })
         .collect()
 }
@@ -347,6 +348,10 @@ mod test {
                 Location {
                     uri: url!("test/index.norg"),
                     range: range!(8, 2, 8, 18),
+                },
+                Location {
+                    uri: url!("test/index.norg"),
+                    range: range!(9, 2, 9, 18),
                 },
             ]
         )

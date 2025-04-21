@@ -6,14 +6,18 @@ impl Workspace {
         walkdir::WalkDir::new(&self.path)
             .min_depth(1)
             .into_iter()
-            .filter(|e| match e {
-                Ok(entry) => {
-                    !entry.file_name().to_str().unwrap_or(".").starts_with('.')
-                        && !entry.path().is_dir()
+            .filter_map(|entry| {
+                let entry = entry.ok()?;
+                let path = entry.path();
+                if path.is_dir()
+                    || path.file_name()?.to_string_lossy().starts_with('.')
+                    || !path.extension().is_some_and(|ext| ext == "norg")
+                {
+                    return None;
                 }
-                Err(_) => false,
+                Some(entry)
             })
-            .map(|file| file.unwrap().into_path())
+            .map(|file| file.into_path())
             .collect()
     }
 }
