@@ -2,7 +2,7 @@ use crate::dirman::workspace::Workspace;
 use std::path::PathBuf;
 
 impl Workspace {
-    pub fn files(&self) -> Vec<PathBuf> {
+    pub fn iter_files(&self) -> impl Iterator<Item = PathBuf> {
         walkdir::WalkDir::new(&self.path)
             .min_depth(1)
             .into_iter()
@@ -18,6 +18,5 @@ impl Workspace {
                 Some(entry)
             })
             .map(|file| file.into_path())
-            .collect()
     }
 }

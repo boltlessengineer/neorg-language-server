@@ -208,8 +208,7 @@ fn iter_links() -> impl Iterator<Item = (Url, Link)> {
     let dirman = WS_MANAGER.get().unwrap().lock().unwrap();
     dirman
         .get_current_workspace()
-        .files()
-        .into_iter()
+        .iter_files()
         .filter_map(|path| {
             let url = Url::from_file_path(&path).ok()?;
             let doc_store = DOC_STORE.get().unwrap().lock().unwrap();
