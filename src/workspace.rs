@@ -5,7 +5,7 @@ use std::{
 
 use log::error;
 use lsp_types::Url;
-use crate::dirman::workspace::{Workspace, WorkspaceManager};
+use neorg_dirman::workspace::{Workspace, WorkspaceManager};
 
 pub static WS_MANAGER: OnceLock<Arc<Mutex<WorkspaceManager>>> = OnceLock::new();
 

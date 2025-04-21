@@ -238,6 +238,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "neorg-dirman"
+version = "0.1.1"
+dependencies = [
+ "walkdir",
+]
+
+[[package]]
 name = "neorg-language-server"
 version = "0.1.0"
 dependencies = [
@@ -245,6 +252,7 @@ dependencies = [
  "log",
  "lsp-server",
  "lsp-types",
+ "neorg-dirman",
  "ropey",
  "serde",
  "serde_json",
@@ -252,7 +260,6 @@ dependencies = [
  "structured-logger",
  "tree-sitter",
  "tree-sitter-norg",
- "walkdir",
 ]
 
 [[package]]

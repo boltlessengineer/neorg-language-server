@@ -4,7 +4,6 @@ mod handlers;
 mod norg;
 mod tree_sitter;
 mod workspace;
-mod dirman;
 
 use std::{fs::File, path::PathBuf};
 

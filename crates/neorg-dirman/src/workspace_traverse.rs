@@ -1,4 +1,4 @@
-use crate::dirman::workspace::Workspace;
+use crate::workspace::Workspace;
 use std::path::PathBuf;
 
 impl Workspace {

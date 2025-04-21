@@ -7,14 +7,12 @@ license = "GPL-3.0"
 repository = "https://github.com/boltlessengineer/neorg-language-server"
 exclude = ["test/*"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 anyhow = "1.0.75"
 log = "0.4.20"
 lsp-server = "0.7.4"
 lsp-types = "0.95.0"
-# neorg-dirman = { version = "0.1.1", path = "./crates/dirman" }
+neorg-dirman = { path = "crates/neorg-dirman" }
 ropey = "1.6.1"
 serde = "1.0.193"
 serde_json = "1.0.108"
@@ -23,7 +21,13 @@ structured-logger = "1.0.3"
 tree-sitter = "0.25.3"
 # tree-sitter-norg's version is "0" to match v1 and v3 version
 tree-sitter-norg = "0"
-walkdir = "2.4.0"
+
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+publish = false
 
 # dirty temporary fix until tree-sitter-norg3 is completed
 [patch.crates-io]

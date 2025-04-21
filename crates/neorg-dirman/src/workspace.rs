@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -91,3 +89,4 @@ impl<'a> WorkspaceManager {
         self.workspaces.insert(workspace.name.clone(), workspace);
     }
 }
+
