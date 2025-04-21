@@ -1,9 +1,11 @@
+use std::path::{Path, PathBuf};
+
 use anyhow::anyhow;
 use lsp_types::Url;
 use ropey::RopeSlice;
-use tree_sitter::{Node, Query, QueryCursor, TextProvider};
+use tree_sitter::{Node, Query, QueryCursor, StreamingIterator, TextProvider};
 
-use crate::document::Document;
+use crate::{document::Document, workspace::{WorkspaceExt as _, WS_MANAGER}};
 
 pub trait PositionTrait {
     fn line(&self) -> usize;
@@ -52,30 +54,47 @@ impl ToLspRange for tree_sitter::Range {
 }
 
 pub fn new_norg3_query(source: &str) -> Query {
-    Query::new(tree_sitter_norg::language(), source).expect("can't generate query")
+    Query::new(&tree_sitter_norg::LANGUAGE.into(), source).expect("can't generate query")
 }
 
 #[derive(Debug, Clone)]
 pub enum LinkDestination {
     Uri(String),
-    NorgFile {
-        root: Option<LinkRoot>,
-        path: String,
+    Scoped {
+        file: Option<NorgFile>,
         scope: Vec<LinkScope>,
     },
-    #[allow(dead_code)]
-    Scope(Vec<LinkScope>),
 }
 
 #[derive(Debug, Clone)]
-pub enum LinkRoot {
+pub struct NorgFile {
+    root: Option<LinkWorkspace>,
+    path: String,
+}
+
+impl ToString for NorgFile {
+    fn to_string(&self) -> String {
+        if let Some(root) = &self.root {
+            root.to_string() + &self.path
+        } else {
+            self.path.clone()
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum LinkWorkspace {
+    /// $/
     Current,
+    /// $foo/
     Workspace(String),
-    Root,
 }
 
 #[derive(Debug, Clone)]
-pub struct LinkScope;
+pub enum LinkScope {
+    Heading(u16, String),
+    WikiHeading(String),
+}
 
 #[derive(Debug, Clone)]
 pub struct Link {
@@ -85,41 +104,42 @@ pub struct Link {
     // pub origin: Url,
 }
 
-impl ToString for LinkRoot {
+impl ToString for LinkWorkspace {
     fn to_string(&self) -> String {
         match self {
             Self::Current => "$/".to_owned(),
             Self::Workspace(workspace) => format!("!${workspace}/"),
-            Self::Root => "/".to_owned(),
         }
     }
 }
 
 impl ToString for LinkScope {
     fn to_string(&self) -> String {
-        todo!()
+        match self {
+            Self::Heading(level, text) => format!("{} {text}", "*".repeat((*level).into())),
+            Self::WikiHeading(text) => format!("? {text}"),
+        }
     }
 }
 
-#[allow(unused_variables)]
 impl ToString for LinkDestination {
     fn to_string(&self) -> String {
         match self {
             Self::Uri(uri) => uri.to_owned(),
-            Self::NorgFile { root, path, scope } => {
-                let root = root.as_ref().map_or("".to_owned(), |r| r.to_string());
-                root + path
+            Self::Scoped {
+                file: Some(file),
+                scope,
+            } => {
+                file.to_string()
                     + &scope
                         .iter()
-                        .map(|s| s.to_string())
-                        .collect::<Vec<String>>()
-                        .join(":")
+                        .map(|s| format!(" : {}", s.to_string()))
+                        .collect::<String>()
             }
-            Self::Scope(scope) => scope
+            Self::Scoped { file: None, scope } => scope
                 .iter()
-                .map(|s| s.to_string())
-                .collect::<Vec<String>>()
-                .join(":"),
+                .map(|s| format!(" : {}", s.to_string()))
+                .collect(),
         }
     }
 }
@@ -132,26 +152,26 @@ impl LinkDestination {
                 Ok(())
             }
             #[allow(unused_variables)]
-            Self::NorgFile { root, path, scope } => {
+            Self::Scoped { file: Some(NorgFile { root, path }), scope } => {
                 // TODO:
                 // 1. find workspace and relative path of `new_uri` from dirman
                 // 2. update `root` and `path` with result
                 // Url::parse(&new_uri).unwrap().path().starts_with(new_uri);
                 todo!("update norg_file type link destination")
             }
-            // Self::Scope(_) => Err(LinkDestUpdateErr::CantFindWorkspace),
-            Self::Scope(_) => Err(anyhow!("Link has no path value")),
+            Self::Scoped { file: None, scope: _ } => Err(anyhow!("Link has no path value")),
         }
     }
     pub fn get_location(&self, origin: &Url) -> anyhow::Result<lsp_types::Location> {
+        let dirman = WS_MANAGER.get().unwrap().lock().unwrap();
         Ok(match &self {
             Self::Uri(uri) => lsp_types::Location {
                 uri: Url::parse(&uri)?,
                 range: Default::default(),
             },
-            Self::NorgFile {
-                root,
-                path,
+            Self::Scoped {
+                file: Some(NorgFile { root, path }),
+                // TODO: implement scoped links
                 scope: _,
             } => {
                 let path = if path.ends_with(".norg") {
@@ -160,10 +180,28 @@ impl LinkDestination {
                     path.to_owned() + ".norg"
                 };
                 let uri = match root {
-                    None => origin.join(&path)?,
-                    Some(LinkRoot::Root) => Url::parse(&format!("file:///{}", &path))?,
-                    Some(LinkRoot::Workspace(_)) | Some(LinkRoot::Current) => {
-                        return Err(anyhow!("workspace links are not implemented yet"))
+                    None => {
+                        let path = origin.join(&path)?;
+                        log::error!("{path}");
+                        path
+                    },
+                    Some(LinkWorkspace::Workspace(name)) => {
+                        let workspace = dirman
+                            .get_workspace(name)
+                            .ok_or(anyhow!("workspace with {name} doesn't exist"))?;
+                        let url = workspace
+                            .get_url()
+                            .map_err(|_| anyhow!("can't convert workspace path to url"))?;
+                        url.join(&path)?
+                    }
+                    Some(LinkWorkspace::Current) => {
+                        let current_workspace = dirman.get_current_workspace();
+                        let url = current_workspace
+                            .get_url()
+                            .map_err(|_| anyhow!("can't convert workspace path to url"))?;
+                        log::error!("{url}");
+                        log::error!("{path}");
+                        url.join(&path)?
                     }
                 };
                 lsp_types::Location {
@@ -171,38 +209,89 @@ impl LinkDestination {
                     range: Default::default(),
                 }
             }
-            Self::Scope(_) => unimplemented!("scope is not implemented yet"),
+            Self::Scoped {
+                file: None,
+                scope: _,
+            } => unimplemented!("scope is not implemented yet"),
         })
     }
 }
 
+struct ScopedLinkTargetIterator<'a> {
+    node: Option<Node<'a>>
+}
+
+impl<'a> Iterator for ScopedLinkTargetIterator<'a> {
+    type Item = Node<'a>;
+    fn next(&mut self) -> Option<Self::Item> {
+        let scope_node = self.node?;
+        self.node = scope_node.named_child(1);
+        scope_node.named_child(0)
+    }
+}
+
 impl Link {
-    fn parse_from_node<'a>(node: Node<'_>, source: &'a [u8]) -> Option<Self> {
-        let destination = node.child_by_field_name("destination")?;
-        return Some(Link {
+    fn parse_from_node<'a>(node: Node<'_>, source: &'a [u8]) -> anyhow::Result<Self> {
+        let target_node = node
+            .child_by_field_name("target")
+            .ok_or(anyhow!("`target` field doesn't exist"))?;
+        return Ok(Link {
             range: node.range(),
-            dest_range: destination.range(),
-            destination: match destination.kind() {
-                "uri" => LinkDestination::Uri(destination.utf8_text(source).unwrap().to_string()),
-                "norg_file" => LinkDestination::NorgFile {
-                    root: destination
-                        .child_by_field_name("root")
-                        .map_or(None, |node| match node.kind() {
-                            "file_root" => Some(LinkRoot::Root),
-                            "current_workspace" => Some(LinkRoot::Current),
-                            "workspace" => Some(LinkRoot::Workspace(
-                                node.utf8_text(source).unwrap().to_string(),
-                            )),
-                            k => unreachable!("invalid root kind: {k}"),
-                        }),
-                    path: destination
-                        .child_by_field_name("path")
-                        .unwrap()
-                        .utf8_text(source)
-                        .unwrap()
-                        .to_string(),
-                    scope: vec![],
-                },
+            dest_range: target_node.range(),
+            destination: match target_node.kind() {
+                "raw_target" => {
+                    LinkDestination::Uri(target_node.utf8_text(source).unwrap().to_string())
+                }
+                "scoped_target" => {
+                    let mut iter = ScopedLinkTargetIterator {
+                        node: Some(target_node),
+                    }
+                    .peekable();
+                    let file =
+                        if iter.peek().ok_or(anyhow!("scope is empty"))?.kind() == "raw_target" {
+                            let first = iter.next().unwrap();
+                            let raw_path = first.utf8_text(source).unwrap();
+                            let (workspace, path) = if raw_path.starts_with("$/") {
+                                (Some(LinkWorkspace::Current), &raw_path[2..])
+                            } else if raw_path.starts_with("$") {
+                                let name = Path::new(&raw_path[1..])
+                                    .iter()
+                                    .next()
+                                    .unwrap()
+                                    .to_string_lossy()
+                                    .into_owned();
+                                let path = raw_path.trim_start_matches(&format!("${name}"));
+                                (Some(LinkWorkspace::Workspace(name)), path)
+                            } else {
+                                (None, raw_path)
+                            };
+                            Some(NorgFile {
+                                root: workspace,
+                                path: path.to_string(),
+                            })
+                        } else {
+                            None
+                        };
+                    let mut scope = vec![];
+                    while let Some(node) = iter.next() {
+                        scope.push(match node.kind() {
+                            "heading_target" => {
+                                let prefix_node = node.child(0).unwrap();
+                                let level = prefix_node.range().end_byte - prefix_node.range().start_byte;
+                                let text_node = node.child_by_field_name("text").unwrap();
+                                let text = text_node.utf8_text(source).unwrap().to_string();
+                                LinkScope::Heading(level as u16, text)
+                            }
+                            "wiki_target" => {
+                                let text_node = node.child_by_field_name("text").unwrap();
+                                let text = text_node.utf8_text(source).unwrap().to_string();
+                                LinkScope::WikiHeading(text)
+                            }
+                            _ => return Err(anyhow!("invalid node for link sco[e")),
+                        })
+                    }
+                    LinkDestination::Scoped { file, scope }
+                }
                 t => todo!("unsupported link type: {t}"),
             },
         });
@@ -222,7 +311,7 @@ impl<'a> Iterator for ChunksBytes<'a> {
 }
 
 pub struct RopeProvider<'a>(RopeSlice<'a>);
-impl<'a> TextProvider<'a> for RopeProvider<'a> {
+impl<'a> TextProvider<&'a [u8]> for RopeProvider<'a> {
     type I = ChunksBytes<'a>;
 
     fn text(&mut self, node: Node) -> Self::I {
@@ -236,18 +325,25 @@ impl<'a> TextProvider<'a> for RopeProvider<'a> {
 pub fn capture_links(node: Node<'_>, slice: RopeSlice<'_>) -> Vec<Link> {
     let query_str = r#"
     ; query
-    (link
-        destination: _ @destination
-    ) @uri_link
+    [
+      (link)
+      (unclosed_link)
+    ] @link
     "#;
     let query = new_norg3_query(query_str);
     let mut qry_cursor = QueryCursor::new();
-    let matches = qry_cursor.matches(&query, node, RopeProvider(slice));
-    return matches
-        .into_iter()
-        .flat_map(|m| m.captures.iter().map(|c| c.node))
-        .filter_map(|n| Link::parse_from_node(n, slice.to_string().as_bytes()))
-        .collect();
+    let mut links = vec![];
+    let mut matches = qry_cursor.matches(&query, node, RopeProvider(slice));
+    while let Some(mat) = matches.next() {
+        let mut nodes: Vec<_> = mat
+            .captures
+            .iter()
+            .map(|cap| cap.node)
+            .filter_map(|node| Link::parse_from_node(node, slice.to_string().as_bytes()).ok())
+            .collect();
+        links.append(&mut nodes);
+    }
+    links
 }
 
 impl Document {
@@ -285,8 +381,16 @@ impl Document {
         None
     }
     pub fn get_link_from_pos<P: PositionTrait>(&self, pos: P) -> Option<Link> {
+        log::error!("get_link_from_pos");
         let node = self.get_kind_node_from_pos(pos, "link", vec!["paragraph"])?;
-        return Link::parse_from_node(node, self.text.to_string().as_bytes());
+        let link = Link::parse_from_node(node, self.text.to_string().as_bytes());
+        match link {
+            Ok(link) => Some(link),
+            Err(err) => {
+                log::error!("{err}");
+                None
+            }
+        }
     }
 }
 
@@ -313,7 +417,7 @@ mod test {
         );
         let mut parser = Parser::new();
         parser
-            .set_language(tree_sitter_norg::language())
+            .set_language(&tree_sitter_norg::LANGUAGE.into())
             .expect("could not load norg parser");
         let tree = parser.parse(&doc_str, None).expect("get tree");
         let root = tree.root_node();
@@ -342,40 +446,41 @@ mod test {
 
         word{:
 
-        word {}
+        word {asdf}
 
         {:word:}
         "#;
         let doc = Document::new(&doc_str);
+        dbg!(doc.text.slice(8..));
         let root = doc.tree.root_node();
-        println!("{}", root.to_sexp());
-        let query_str = r#"
-            ; query
-            (link
-                destination: (norg_file)
-            ) @_link
-
-            (link
-                destination: (uri)
-            ) @_link
-
-            (
-                (ERROR "{")
-                (punc "}")?
-            ) @_link
-        "#;
-        let query = new_norg3_query(query_str);
-        let mut qry_cursor = QueryCursor::new();
-        let list: Vec<Node> = qry_cursor
-            .matches(&query, root, doc.text.to_string().as_bytes())
-            .into_iter()
-            .flat_map(|m| {
-                println!("{m:?}");
-                m.captures.iter().map(|c| c.node)
-            })
-            .collect();
-        list.iter().for_each(|n| {
-            println!("node:{}", n.to_sexp());
-        })
+        dbg!(root.to_sexp());
+        let links = capture_links(root, doc.text.slice(..));
+        dbg!(&links);
+        assert_eq!(4, links.len());
     }
 }
+
+// (document
+//   (paragraph
+//     (word)
+//     (unclosed_link
+//       target: (raw_target
+//         (soft_break))))
+//   (paragraph
+//     (word)
+//     (unclosed_link
+//       target: (scoped_target
+//         (raw_target
+//         (soft_break)))))
+//   (paragraph
+//     (word)
+//     (whitespace)
+//     (link)
+//     (soft_break))
+//   (paragraph
+//     (link
+//       target: (scoped_target
+//         (raw_target
+//         (word))
+//         (scoped_target)))
+//         (soft_break)))

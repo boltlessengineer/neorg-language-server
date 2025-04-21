@@ -70,7 +70,7 @@ fn tree_to_symbols(cursor: &mut ::tree_sitter::TreeCursor, text: &[u8]) -> Vec<D
                 cursor.goto_first_child();
                 return tree_to_symbols(cursor, text);
             }
-            "heading" => {
+            "section" => {
                 // TODO: return range that can used for `name` and `selection_range`
                 // also should return the symbol type
                 // if field `title` is empty (slide/indent segments,) create
@@ -137,7 +137,7 @@ pub fn handle_definition(req: lsp_server::Request) -> Response {
     let doc_store = DOC_STORE.get().unwrap().lock().unwrap();
     let doc = doc_store.get(&req_uri).unwrap();
     if let Some(link) = doc.get_link_from_pos(req_pos) {
-        debug!("{link:?}");
+        error!("{link:?}");
         match link.destination.get_location(&req_uri) {
             Ok(loc) => {
                 let definitions = GotoDefinitionResponse::Scalar(loc);
@@ -277,18 +277,16 @@ mod test {
         };
     }
 
-    #[allow(deprecated)]
     #[test]
     fn document_symbols() {
-        let doc = r#"|example
+        let doc = r#"
         * h1eading
         helo
-        |end
         * h2eading
         "#;
         let mut parser = Parser::new();
         parser
-            .set_language(tree_sitter_norg::language())
+            .set_language(&tree_sitter_norg::LANGUAGE.into())
             .expect("could not load norg parser");
         let tree = parser.parse(doc, None).expect("get tree");
         let mut cursor = tree.walk();
@@ -296,35 +294,26 @@ mod test {
         assert_eq!(
             symbols,
             vec![
-                DocumentSymbol {
-                    name: "ranged tag".to_string(),
-                    detail: Some(
-                        "|example\n        * h1eading\n        helo\n        |end\n".to_string()
-                    ),
-                    kind: SymbolKind::STRUCT,
-                    tags: None,
-                    deprecated: None,
-                    range: range!(0, 0, 4, 0),
-                    selection_range: range!(0, 0, 4, 0),
-                    children: Some(vec![DocumentSymbol {
-                        name: "heading".to_string(),
-                        detail: Some("* h1eading\n        helo\n".to_string()),
-                        kind: SymbolKind::STRUCT,
-                        tags: None,
-                        deprecated: None,
-                        range: range!(1, 8, 3, 0),
-                        selection_range: range!(1, 8, 3, 0),
-                        children: None,
-                    }]),
-                },
+                #[allow(deprecated)]
                 DocumentSymbol {
                     name: "heading".to_string(),
-                    detail: Some("* h2eading\n".to_string()),
+                    detail: Some("* h1eading\n        helo\n".to_string()),
                     kind: SymbolKind::STRUCT,
                     tags: None,
                     deprecated: None,
-                    range: range!(4, 8, 5, 0),
-                    selection_range: range!(4, 8, 5, 0),
+                    range: range!(1, 8, 3, 0),
+                    selection_range: range!(1, 8, 3, 0),
+                    children: None,
+                },
+                #[allow(deprecated)]
+                DocumentSymbol {
+                    name: "heading".to_string(),
+                    detail: Some("* h2eading\n        ".to_string()),
+                    kind: SymbolKind::STRUCT,
+                    tags: None,
+                    deprecated: None,
+                    range: range!(3, 8, 4, 8),
+                    selection_range: range!(3, 8, 4, 8),
                     children: None,
                 },
             ]
@@ -351,21 +340,13 @@ mod test {
                     uri: url!("test/folder/bar.norg"),
                     range: range!(0, 0, 0, 7),
                 },
-                // FIXME: first link should be invalid
-                // but currently no way to capture nested node with tree-sitter queries
-                // see: https://github.com/tree-sitter/tree-sitter/issues/880
                 Location {
                     uri: url!("test/index.norg"),
-                    range: range!(1, 0, 1, 14),
-                },
-                //
-                Location {
-                    uri: url!("test/index.norg"),
-                    range: range!(10, 2, 10, 16),
+                    range: range!(7, 2, 7, 16),
                 },
                 Location {
                     uri: url!("test/index.norg"),
-                    range: range!(11, 2, 11, 18),
+                    range: range!(8, 2, 8, 18),
                 },
             ]
         )

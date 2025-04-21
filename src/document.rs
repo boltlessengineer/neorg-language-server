@@ -27,7 +27,7 @@ impl Document {
         let rope = Rope::from_str(&text);
         let mut parser = Parser::new();
         parser
-            .set_language(tree_sitter_norg::language())
+            .set_language(&tree_sitter_norg::LANGUAGE.into())
             .expect("could not load norg parser");
         let tree = parser.parse(&text, None).unwrap();
         let links = capture_links(tree.root_node(), rope.slice(..));
@@ -87,7 +87,7 @@ impl Document {
     pub fn update(&mut self) {
         let mut parser = Parser::new();
         parser
-            .set_language(tree_sitter_norg::language())
+            .set_language(&tree_sitter_norg::LANGUAGE.into())
             .expect("could not load norg parser");
         self.tree = parser
             .parse(self.text.to_string(), Some(&self.tree))

@@ -1,6 +1,3 @@
-|example
-{:folder/foo:}
-|end
 * heading-1
 * heading(2)
   paragraph

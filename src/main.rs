@@ -17,7 +17,6 @@ use lsp_types::{
     WorkDoneProgressOptions, WorkspaceFileOperationsServerCapabilities,
     WorkspaceFoldersServerCapabilities, WorkspaceServerCapabilities,
 };
-use structured_logger::{json::new_writer, Builder};
 
 use crate::{
     config::Config,
@@ -51,9 +50,10 @@ fn main() -> Result<()> {
         .append(true)
         .open("neorg.log")
         .expect("can't open log file");
-    Builder::with_level("WARN")
-        .with_target_writer("*", new_writer(log_file))
-        .init();
+    // structured_logger::Builder::with_level("WARN")
+    //     .with_target_writer("*", structured_logger::json::new_writer(log_file))
+    //     .init();
+    let _ = simplelog::WriteLogger::init(log::LevelFilter::Warn, Default::default(), log_file);
     let (connection, iothreads) = Connection::stdio();
     let server_capabilities = serde_json::to_value(ServerCapabilities {
         completion_provider: Some(CompletionOptions {
