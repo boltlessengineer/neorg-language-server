@@ -1,11 +1,11 @@
-mod config;
 mod document;
 mod handlers;
 mod norg;
+mod state;
 mod tree_sitter;
 mod workspace;
 
-use std::{fs::File, path::PathBuf};
+use std::fs::File;
 
 use anyhow::Result;
 use log::{error, warn};
@@ -16,21 +16,21 @@ use lsp_types::{
     WorkDoneProgressOptions, WorkspaceFileOperationsServerCapabilities,
     WorkspaceFoldersServerCapabilities, WorkspaceServerCapabilities,
 };
+use neorg_dirman::workspace::Workspace;
+use state::State;
 
 use crate::{
-    config::Config,
     document::init_doc_store,
     handlers::{handle_noti, handle_req},
     norg::init_norg_completion,
-    workspace::init_worksapce,
 };
 
-fn main_loop(connection: Connection, config: &Config) -> Result<()> {
+fn main_loop(connection: Connection, state: State) -> Result<()> {
     error!("Server Initialized!!");
     for msg in &connection.receiver {
         error!("connection received msg: {:?}", msg);
         let resp = match msg {
-            Message::Request(req) => handle_req(config, req),
+            Message::Request(req) => handle_req(&state, req),
             Message::Response(_) => continue,
             Message::Notification(noti) => handle_noti(noti),
         };
@@ -104,17 +104,14 @@ fn main() -> Result<()> {
     .unwrap();
     let init_params = connection.initialize(server_capabilities)?;
     let init_params: InitializeParams = serde_json::from_value(init_params)?;
-    let config = Config::new(init_params);
-    init_worksapce(PathBuf::from(
-        config
-            .init_params
-            .root_uri
-            .as_ref()
-            .unwrap()
-            .to_file_path()
-            .unwrap(),
-    ));
-    main_loop(connection, &config)?;
+    let workspace = init_params
+        .root_uri
+        .as_ref()
+        .filter(|uri| uri.scheme() == "file")
+        .and_then(|uri| uri.to_file_path().ok())
+        .map(Workspace::from);
+    let state = State::new(workspace);
+    main_loop(connection, state)?;
     iothreads.join()?;
     warn!("shut down");
     Ok(())

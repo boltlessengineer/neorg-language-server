@@ -7,13 +7,10 @@ use lsp_types::{
     Documentation, GotoDefinitionParams, GotoDefinitionResponse, InsertTextFormat, Location,
     ReferenceParams, RenameFilesParams, Url,
 };
+use neorg_dirman::workspace::Workspace;
 
 use crate::{
-    config::Config,
-    document::{Document, DOC_STORE},
-    norg::NORG_BLOCKS,
-    tree_sitter::{Link, ToLspRange},
-    workspace::WS_MANAGER,
+    document::{Document, DOC_STORE}, norg::NORG_BLOCKS, state::State, tree_sitter::{Link, ToLspRange}, workspace::WorkspaceExt as _
 };
 
 pub fn handle_completion(req: lsp_server::Request) -> Response {
@@ -129,8 +126,11 @@ pub fn handle_document_symbol(req: lsp_server::Request) -> Response {
     return Response::new_ok(req.id, serde_json::to_value(symbols).unwrap());
 }
 
-pub fn handle_definition(req: lsp_server::Request) -> Response {
+pub fn handle_definition(state: &State, req: lsp_server::Request) -> Response {
     error!("goto definition");
+    let Some(ref workspace) = state.workspace else {
+        todo!()
+    };
     let params: GotoDefinitionParams = serde_json::from_value(req.params).unwrap();
     let req_uri = params.text_document_position_params.text_document.uri;
     let req_pos = params.text_document_position_params.position;
@@ -138,15 +138,15 @@ pub fn handle_definition(req: lsp_server::Request) -> Response {
     let doc = doc_store.get(&req_uri).unwrap();
     if let Some(link) = doc.get_link_from_pos(req_pos) {
         error!("{link:?}");
-        match link.destination.get_location(&req_uri) {
-            Ok(loc) => {
+        match workspace.resolve_link_location(&req_uri, &link.destination) {
+            Some(loc) => {
                 let definitions = GotoDefinitionResponse::Scalar(loc);
                 Response::new_ok(req.id, serde_json::to_value(definitions).unwrap())
             }
-            Err(e) => Response::new_err(
+            None => Response::new_err(
                 req.id,
                 lsp_server::ErrorCode::RequestFailed as i32,
-                e.to_string(),
+                "definition not found".to_string(),
             ),
         }
     } else {
@@ -158,7 +158,10 @@ pub fn handle_definition(req: lsp_server::Request) -> Response {
     }
 }
 
-pub fn handle_references(_config: &Config, req: lsp_server::Request) -> Response {
+pub fn handle_references(state: &State, req: lsp_server::Request) -> Response {
+    let Some(ref workspace) = state.workspace else {
+        todo!()
+    };
     let params: ReferenceParams = serde_json::from_value(req.params).unwrap();
     let req_uri = params.text_document_position.text_document.uri;
     let req_pos = params.text_document_position.position;
@@ -170,15 +173,15 @@ pub fn handle_references(_config: &Config, req: lsp_server::Request) -> Response
     };
     if let Some(link) = link_from_pos {
         error!("{link:?}");
-        match link.destination.get_location(&req_uri) {
-            Ok(req_link_loc) => {
-                let references = list_references_from_location(req_link_loc);
+        match workspace.resolve_link_location(&req_uri, &link.destination) {
+            Some(req_link_loc) => {
+                let references = list_references_from_location(&workspace, req_link_loc);
                 Response::new_ok(req.id, serde_json::to_value(references).unwrap())
             }
-            Err(e) => Response::new_err(
+            None => Response::new_err(
                 req.id,
                 lsp_server::ErrorCode::RequestFailed as i32,
-                e.to_string(),
+                "reference not found".to_string(),
             ),
         }
     } else {
@@ -190,12 +193,11 @@ pub fn handle_references(_config: &Config, req: lsp_server::Request) -> Response
     }
 }
 
-fn list_references_from_location(loc: Location) -> Vec<Location> {
-    iter_links()
+fn list_references_from_location(workspace: &Workspace, loc: Location) -> Vec<Location> {
+    iter_links(workspace)
         .filter(|(origin, link)| {
-            link.destination
-                .get_location(origin)
-                .is_ok_and(|link_loc| link_loc == loc)
+            workspace.resolve_link_location(origin, &link.destination)
+                .is_some_and(|link_loc| link_loc == loc)
         })
         .map(|(uri, link)| lsp_types::Location {
             uri,
@@ -204,33 +206,29 @@ fn list_references_from_location(loc: Location) -> Vec<Location> {
         .collect()
 }
 
-fn iter_links() -> impl Iterator<Item = (Url, Link)> {
-    let dirman = WS_MANAGER.get().unwrap().lock().unwrap();
-    dirman
-        .get_current_workspace()
+fn iter_links(workspace: &Workspace) -> impl Iterator<Item = (Url, Link)> {
+    workspace
         .iter_files()
         .filter_map(|path| {
             let url = Url::from_file_path(&path).ok()?;
-            let doc_store = DOC_STORE.get().unwrap().lock().unwrap();
-            // TODO: push document created from path to DOC_STORE
-            doc_store
-                .get(&url)
-                .map(|d| d.clone())
-                .or(Document::from_path(&path).ok())
-                .map(|d| (url, d))
+            Document::from_path(&path).map(|d| (url, d)).ok()
         })
         .flat_map(|(url, d)| d.links.into_iter().map(move |l| (url.clone(), l)))
 }
 
-pub fn handle_will_rename_files(req: lsp_server::Request) -> Response {
+pub fn handle_will_rename_files(state: &State, req: lsp_server::Request) -> Response {
     error!("willrename");
+    let Some(ref workspace) = state.workspace else {
+        // return Response::new_err(req.id, code, message)
+        todo!()
+    };
     let params: RenameFilesParams = serde_json::from_value(req.params).unwrap();
     let mut changes: HashMap<Url, Vec<lsp_types::TextEdit>> = HashMap::new();
     params.files.iter().for_each(|file_rename| {
-        iter_links()
-            .filter(|(url, link)| match link.destination.get_location(url) {
-                Ok(loc) => loc.uri.to_string() == file_rename.old_uri,
-                Err(_) => false,
+        iter_links(&workspace)
+            .filter(|(url, link)| match workspace.resolve_link_location(url, &link.destination) {
+                Some(loc) => loc.uri.to_string() == file_rename.old_uri,
+                None => false,
             })
             .for_each(|(link_origin, link)| {
                 let mut new_dest = link.destination;
@@ -255,8 +253,6 @@ pub fn handle_will_rename_files(req: lsp_server::Request) -> Response {
 mod test {
     use lsp_types::{Position, Range, SymbolKind};
     use tree_sitter::Parser;
-
-    use crate::{document::init_doc_store, workspace::init_worksapce};
 
     use super::*;
 
@@ -322,15 +318,13 @@ mod test {
 
     #[test]
     fn references() {
-        // structured_logger::Builder::with_level("debug").init();
         let current_dir = std::env::current_dir().expect("failed to get current dir");
-        init_doc_store();
-        init_worksapce(current_dir.join("./test"));
+        let workspace = Workspace::from(current_dir.join("./test"));
         let location = Location {
             uri: Url::from_file_path(current_dir.join("test/folder/foo.norg")).unwrap(),
             range: Default::default(),
         };
-        let mut refs = list_references_from_location(location);
+        let mut refs = list_references_from_location(&workspace, location);
         // sort because file iterator might differ by environment
         refs.sort_by_key(|loc| format!("{loc:?}"));
         assert_eq!(

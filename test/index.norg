@@ -8,7 +8,6 @@
   {:folder/foo:}
   {:./folder/foo:}
   {:$/folder/foo:}
-  {:$folder/foo:}
   {:/home/ubuntu/notes/todo:}
   {file:///home/ubuntu/projects/neorg-ls/test/baz.norg}
   {file:///home/ubuntu/projects/neorg-ls/test/folder/asdf/file.norg}

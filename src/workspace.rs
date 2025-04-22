@@ -1,34 +1,67 @@
-use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex, OnceLock},
-};
-
-use log::error;
 use lsp_types::Url;
-use neorg_dirman::workspace::{Workspace, WorkspaceManager};
+use neorg_dirman::workspace::Workspace;
 
-pub static WS_MANAGER: OnceLock<Arc<Mutex<WorkspaceManager>>> = OnceLock::new();
-
-pub fn init_worksapce(path: PathBuf) {
-    let workspace = Workspace {
-        name: path.display().to_string(),
-        path,
-    };
-    error!("{workspace:?}");
-    WS_MANAGER
-        .set(Arc::new(Mutex::new(
-            WorkspaceManager::from_single_workspace(workspace),
-        )))
-        .unwrap();
-}
+use crate::tree_sitter::{LinkDestination, LinkWorkspace, NorgFile};
 
 pub trait WorkspaceExt {
     fn get_url(&self) -> Result<Url, ()>;
+    fn resolve_link_location(
+        &self,
+        origin: &Url,
+        link: &LinkDestination,
+    ) -> Option<lsp_types::Location>;
 }
 
 impl WorkspaceExt for Workspace {
     fn get_url(&self) -> Result<Url, ()> {
         Url::from_directory_path(&self.path)
     }
+    fn resolve_link_location(
+        &self,
+        origin: &Url,
+        link: &LinkDestination,
+    ) -> Option<lsp_types::Location> {
+        Some(match link {
+            LinkDestination::Uri(uri) => lsp_types::Location {
+                uri: Url::parse(&uri).ok()?,
+                range: Default::default(),
+            },
+            LinkDestination::Scoped {
+                file: Some(NorgFile { root, path }),
+                scope: _,
+            } => {
+                let path = if path.ends_with(".norg") {
+                    path.to_owned()
+                } else {
+                    path.to_owned() + ".norg"
+                };
+                let uri = match root {
+                    None => {
+                        let path = origin.join(&path).ok()?;
+                        log::error!("{path}");
+                        path
+                    }
+                    Some(LinkWorkspace::Workspace(_name)) => {
+                        unimplemented!("external workspace is not implemented yet")
+                    }
+                    Some(LinkWorkspace::Current) => {
+                        let url = self.get_url().ok()?;
+                        log::error!("{url}");
+                        log::error!("{path}");
+                        url.join(&path).ok()?
+                    }
+                };
+                lsp_types::Location {
+                    uri,
+                    range: Default::default(),
+                }
+            }
+            LinkDestination::Scoped {
+                file: None,
+                scope: _,
+            } => {
+                unimplemented!("scope is not implemented yet")
+            }
+        })
+    }
 }
-

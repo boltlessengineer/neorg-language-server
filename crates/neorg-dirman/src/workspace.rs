@@ -7,6 +7,18 @@ pub struct Workspace {
     pub path: PathBuf,
 }
 
+impl Workspace {
+    pub fn new(name: String, path: PathBuf) -> Self {
+        Self { name, path }
+    }
+    pub fn from(path: PathBuf) -> Self {
+        Self {
+            name: path.display().to_string(),
+            path,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct WorkspaceManager {
     pub workspaces: HashMap<String, Workspace>,

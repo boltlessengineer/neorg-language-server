@@ -1,11 +1,10 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::anyhow;
-use lsp_types::Url;
 use ropey::RopeSlice;
 use tree_sitter::{Node, Query, QueryCursor, StreamingIterator, TextProvider};
 
-use crate::{document::Document, workspace::{WorkspaceExt as _, WS_MANAGER}};
+use crate::document::Document;
 
 pub trait PositionTrait {
     fn line(&self) -> usize;
@@ -68,8 +67,8 @@ pub enum LinkDestination {
 
 #[derive(Debug, Clone)]
 pub struct NorgFile {
-    root: Option<LinkWorkspace>,
-    path: String,
+    pub root: Option<LinkWorkspace>,
+    pub path: String,
 }
 
 impl ToString for NorgFile {
@@ -161,59 +160,6 @@ impl LinkDestination {
             }
             Self::Scoped { file: None, scope: _ } => Err(anyhow!("Link has no path value")),
         }
-    }
-    pub fn get_location(&self, origin: &Url) -> anyhow::Result<lsp_types::Location> {
-        let dirman = WS_MANAGER.get().unwrap().lock().unwrap();
-        Ok(match &self {
-            Self::Uri(uri) => lsp_types::Location {
-                uri: Url::parse(&uri)?,
-                range: Default::default(),
-            },
-            Self::Scoped {
-                file: Some(NorgFile { root, path }),
-                // TODO: implement scoped links
-                scope: _,
-            } => {
-                let path = if path.ends_with(".norg") {
-                    path.to_owned()
-                } else {
-                    path.to_owned() + ".norg"
-                };
-                let uri = match root {
-                    None => {
-                        let path = origin.join(&path)?;
-                        log::error!("{path}");
-                        path
-                    },
-                    Some(LinkWorkspace::Workspace(name)) => {
-                        let workspace = dirman
-                            .get_workspace(name)
-                            .ok_or(anyhow!("workspace with {name} doesn't exist"))?;
-                        let url = workspace
-                            .get_url()
-                            .map_err(|_| anyhow!("can't convert workspace path to url"))?;
-                        url.join(&path)?
-                    }
-                    Some(LinkWorkspace::Current) => {
-                        let current_workspace = dirman.get_current_workspace();
-                        let url = current_workspace
-                            .get_url()
-                            .map_err(|_| anyhow!("can't convert workspace path to url"))?;
-                        log::error!("{url}");
-                        log::error!("{path}");
-                        url.join(&path)?
-                    }
-                };
-                lsp_types::Location {
-                    uri,
-                    range: Default::default(),
-                }
-            }
-            Self::Scoped {
-                file: None,
-                scope: _,
-            } => unimplemented!("scope is not implemented yet"),
-        })
     }
 }
 
@@ -441,46 +387,7 @@ mod test {
         // {:word|:}
         // {:word|word:}
         // {:word|word} <- bit weird, but would be useful to have
-        let doc_str = r#"
-        word{
 
-        word{:
-
-        word {asdf}
-
-        {:word:}
-        "#;
-        let doc = Document::new(&doc_str);
-        dbg!(doc.text.slice(8..));
-        let root = doc.tree.root_node();
-        dbg!(root.to_sexp());
-        let links = capture_links(root, doc.text.slice(..));
-        dbg!(&links);
-        assert_eq!(4, links.len());
+        // TODO: write test
     }
 }
-
-// (document
-//   (paragraph
-//     (word)
-//     (unclosed_link
-//       target: (raw_target
-//         (soft_break))))
-//   (paragraph
-//     (word)
-//     (unclosed_link
-//       target: (scoped_target
-//         (raw_target
-//         (soft_break)))))
-//   (paragraph
-//     (word)
-//     (whitespace)
-//     (link)
-//     (soft_break))
-//   (paragraph
-//     (link
-//       target: (scoped_target
-//         (raw_target
-//         (word))
-//         (scoped_target)))
-//         (soft_break)))
