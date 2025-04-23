@@ -41,10 +41,10 @@ impl PositionTrait for tree_sitter::Point {
 }
 
 pub trait ToLspRange {
-    fn as_lsp_range(&self) -> lsp_types::Range;
+    fn to_lsp_range(&self) -> lsp_types::Range;
 }
 impl ToLspRange for tree_sitter::Range {
-    fn as_lsp_range(&self) -> lsp_types::Range {
+    fn to_lsp_range(&self) -> lsp_types::Range {
         lsp_types::Range {
             start: self.start_point.as_lsp_pos(),
             end: self.end_point.as_lsp_pos(),
@@ -151,20 +151,26 @@ impl LinkDestination {
                 Ok(())
             }
             #[allow(unused_variables)]
-            Self::Scoped { file: Some(NorgFile { root, path }), scope } => {
+            Self::Scoped {
+                file: Some(NorgFile { root, path }),
+                scope,
+            } => {
                 // TODO:
                 // 1. find workspace and relative path of `new_uri` from dirman
                 // 2. update `root` and `path` with result
                 // Url::parse(&new_uri).unwrap().path().starts_with(new_uri);
                 todo!("update norg_file type link destination")
             }
-            Self::Scoped { file: None, scope: _ } => Err(anyhow!("Link has no path value")),
+            Self::Scoped {
+                file: None,
+                scope: _,
+            } => Err(anyhow!("Link has no path value")),
         }
     }
 }
 
 struct ScopedLinkTargetIterator<'a> {
-    node: Option<Node<'a>>
+    node: Option<Node<'a>>,
 }
 
 impl<'a> Iterator for ScopedLinkTargetIterator<'a> {
@@ -223,7 +229,8 @@ impl Link {
                         scope.push(match node.kind() {
                             "heading_target" => {
                                 let prefix_node = node.child(0).unwrap();
-                                let level = prefix_node.range().end_byte - prefix_node.range().start_byte;
+                                let level =
+                                    prefix_node.range().end_byte - prefix_node.range().start_byte;
                                 let text_node = node.child_by_field_name("text").unwrap();
                                 let text = text_node.utf8_text(source).unwrap().to_string();
                                 LinkScope::Heading(level as u16, text)

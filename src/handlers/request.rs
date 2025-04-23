@@ -10,17 +10,20 @@ use lsp_types::{
 use neorg_dirman::workspace::Workspace;
 
 use crate::{
-    document::Document, norg::NORG_BLOCKS, session::Session, tree_sitter::{Link, ToLspRange}, workspace::WorkspaceExt as _
+    document::Document,
+    norg::NORG_BLOCKS,
+    session::Session,
+    tree_sitter::{Link, ToLspRange},
+    workspace::WorkspaceExt as _,
 };
 
 pub fn handle_completion(session: &mut Session, req: lsp_server::Request) -> Response {
     let params: CompletionParams = serde_json::from_value(req.params).unwrap();
-    let uri = params.text_document_position.text_document.uri;
-    let pos = params.text_document_position.position;
-    error!("pos: {pos:?}");
-    let doc = session.get_document(&uri).unwrap();
-    let node = doc.get_node_from_range(pos).expect("can't get node");
-    error!("{}", node.to_sexp());
+    let node = session
+        .get_document(&params.text_document_position.text_document.uri)
+        .unwrap()
+        .get_node_from_range(params.text_document_position.position)
+        .expect("can't get node");
     let list = CompletionList {
         is_incomplete: true,
         items: NORG_BLOCKS
@@ -54,14 +57,14 @@ pub fn handle_completion(session: &mut Session, req: lsp_server::Request) -> Res
             })
             .collect(),
     };
-    return Response::new_ok(req.id, serde_json::to_value(list).unwrap());
+    return Response::new_ok(req.id, list);
 }
 
 fn tree_to_symbols(cursor: &mut ::tree_sitter::TreeCursor, text: &[u8]) -> Vec<DocumentSymbol> {
     let node = cursor.node();
     let mut symbols: Vec<DocumentSymbol> = vec![];
     if node.is_named() {
-        let name = match node.kind() {
+        match node.kind() {
             "document" => {
                 cursor.goto_first_child();
                 return tree_to_symbols(cursor, text);
@@ -69,20 +72,19 @@ fn tree_to_symbols(cursor: &mut ::tree_sitter::TreeCursor, text: &[u8]) -> Vec<D
             "section" => {
                 // TODO: return range that can used for `name` and `selection_range`
                 // also should return the symbol type
-                // if field `title` is empty (slide/indent segments,) create
-                // title with first non-empty line
-                let _title = node.child_by_field_name("title");
-                Some("heading")
+                let title_node = node
+                    .child_by_field_name("heading")
+                    .unwrap()
+                    .child_by_field_name("title")
+                    .unwrap();
+                let title = title_node.utf8_text(text).unwrap();
+                Some(title.to_string())
             }
-            // TODO: should we return more than heading..?
-            // they are one of symbols according to spec, but user would prefer only
-            // linkable symbols
-            "standard_ranged_tag" => Some("ranged tag"),
+            // TODO: add more symbols. (if final syntax has more than headings)
             _ => None,
-        };
-        if let Some(name) = name {
-            let name = name.to_string();
-            let range = node.range().as_lsp_range();
+        }
+        .map(|name| {
+            let range = node.range().to_lsp_range();
             #[allow(deprecated)]
             let sym = DocumentSymbol {
                 name,
@@ -104,7 +106,7 @@ fn tree_to_symbols(cursor: &mut ::tree_sitter::TreeCursor, text: &[u8]) -> Vec<D
                 deprecated: None,
             };
             symbols.push(sym);
-        }
+        });
     }
     if cursor.goto_next_sibling() {
         symbols.append(&mut tree_to_symbols(cursor, text));
@@ -121,7 +123,7 @@ pub fn handle_document_symbol(session: &Session, req: lsp_server::Request) -> Re
     let doc = session.get_document(&uri).unwrap();
     let doc_text = doc.text.to_string();
     let symbols = tree_to_symbols(&mut doc.tree.walk(), doc_text.as_bytes());
-    return Response::new_ok(req.id, serde_json::to_value(symbols).unwrap());
+    return Response::new_ok(req.id, symbols);
 }
 
 pub fn handle_definition(session: &Session, req: lsp_server::Request) -> Response {
@@ -134,11 +136,10 @@ pub fn handle_definition(session: &Session, req: lsp_server::Request) -> Respons
     let req_pos = params.text_document_position_params.position;
     let doc = session.get_document(&req_uri).unwrap();
     if let Some(link) = doc.get_link_from_pos(req_pos) {
-        error!("{link:?}");
         match workspace.resolve_link_location(&req_uri, &link.destination) {
             Some(loc) => {
                 let definitions = GotoDefinitionResponse::Scalar(loc);
-                Response::new_ok(req.id, serde_json::to_value(definitions).unwrap())
+                Response::new_ok(req.id, definitions)
             }
             None => Response::new_err(
                 req.id,
@@ -162,13 +163,16 @@ pub fn handle_references(session: &Session, req: lsp_server::Request) -> Respons
     let params: ReferenceParams = serde_json::from_value(req.params).unwrap();
     let req_uri = params.text_document_position.text_document.uri;
     let req_pos = params.text_document_position.position;
-    let link_from_pos = session.get_document(&req_uri).unwrap().get_link_from_pos(req_pos);
+    let link_from_pos = session
+        .get_document(&req_uri)
+        .unwrap()
+        .get_link_from_pos(req_pos);
     if let Some(link) = link_from_pos {
         error!("{link:?}");
         match workspace.resolve_link_location(&req_uri, &link.destination) {
             Some(req_link_loc) => {
                 let references = list_references_from_location(&workspace, req_link_loc);
-                Response::new_ok(req.id, serde_json::to_value(references).unwrap())
+                Response::new_ok(req.id, references)
             }
             None => Response::new_err(
                 req.id,
@@ -188,12 +192,13 @@ pub fn handle_references(session: &Session, req: lsp_server::Request) -> Respons
 fn list_references_from_location(workspace: &Workspace, loc: Location) -> Vec<Location> {
     iter_links(workspace)
         .filter(|(origin, link)| {
-            workspace.resolve_link_location(origin, &link.destination)
+            workspace
+                .resolve_link_location(origin, &link.destination)
                 .is_some_and(|link_loc| link_loc == loc)
         })
         .map(|(uri, link)| lsp_types::Location {
             uri,
-            range: link.range.as_lsp_range(),
+            range: link.range.to_lsp_range(),
         })
         .collect()
 }
@@ -217,17 +222,18 @@ pub fn handle_will_rename_files(session: &Session, req: lsp_server::Request) -> 
     let params: RenameFilesParams = serde_json::from_value(req.params).unwrap();
     let mut changes: HashMap<Url, Vec<lsp_types::TextEdit>> = HashMap::new();
     params.files.iter().for_each(|file_rename| {
-        iter_links(&workspace)
-            .filter(|(url, link)| match workspace.resolve_link_location(url, &link.destination) {
-                Some(loc) => loc.uri.to_string() == file_rename.old_uri,
-                None => false,
-            })
+        iter_links(workspace)
+            .filter(
+                |(url, link)| match workspace.resolve_link_location(url, &link.destination) {
+                    Some(loc) => loc.uri.to_string() == file_rename.old_uri,
+                    None => false,
+                },
+            )
             .for_each(|(link_origin, link)| {
                 let mut new_dest = link.destination;
                 new_dest.update_uri(&file_rename.new_uri).unwrap();
                 let textedit =
-                    lsp_types::TextEdit::new(link.dest_range.as_lsp_range(), new_dest.to_string());
-                error!("{textedit:?}");
+                    lsp_types::TextEdit::new(link.dest_range.to_lsp_range(), new_dest.to_string());
                 changes
                     .entry(link_origin)
                     .and_modify(|v| v.push(textedit.clone()))
@@ -238,7 +244,7 @@ pub fn handle_will_rename_files(session: &Session, req: lsp_server::Request) -> 
         changes: Some(changes),
         ..Default::default()
     };
-    Response::new_ok(req.id, serde_json::to_value(workspace_edit).unwrap())
+    Response::new_ok(req.id, workspace_edit)
 }
 
 #[cfg(test)]
@@ -271,6 +277,7 @@ mod test {
         * h1eading
         helo
         * h2eading
+        ** h2-1eading
         "#;
         let mut parser = Parser::new();
         parser
@@ -284,7 +291,7 @@ mod test {
             vec![
                 #[allow(deprecated)]
                 DocumentSymbol {
-                    name: "heading".to_string(),
+                    name: "h1eading".to_string(),
                     detail: Some("* h1eading\n        helo\n".to_string()),
                     kind: SymbolKind::STRUCT,
                     tags: None,
@@ -295,14 +302,23 @@ mod test {
                 },
                 #[allow(deprecated)]
                 DocumentSymbol {
-                    name: "heading".to_string(),
-                    detail: Some("* h2eading\n        ".to_string()),
+                    name: "h2eading".to_string(),
+                    detail: Some("* h2eading\n        ** h2-1eading\n        ".to_string()),
                     kind: SymbolKind::STRUCT,
                     tags: None,
                     deprecated: None,
-                    range: range!(3, 8, 4, 8),
-                    selection_range: range!(3, 8, 4, 8),
-                    children: None,
+                    range: range!(3, 8, 5, 8),
+                    selection_range: range!(3, 8, 5, 8),
+                    children: Some(vec![DocumentSymbol {
+                        name: "h2-1eading".to_string(),
+                        detail: Some("** h2-1eading\n        ".to_string()),
+                        kind: SymbolKind::STRUCT,
+                        tags: None,
+                        deprecated: None,
+                        range: range!(4, 8, 5, 8),
+                        selection_range: range!(4, 8, 5, 8),
+                        children: None,
+                    }]),
                 },
             ]
         );

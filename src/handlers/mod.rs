@@ -25,7 +25,10 @@ pub fn handle_req(session: &mut Session, req: lsp_server::Request) -> Option<lsp
     }
 }
 
-pub fn handle_noti(session: &mut Session, noti: lsp_server::Notification) -> Option<lsp_server::Response> {
+pub fn handle_noti(
+    session: &mut Session,
+    noti: lsp_server::Notification,
+) -> Option<lsp_server::Response> {
     match noti.method.as_str() {
         "textDocument/didOpen" => handle_did_open(session, noti.params),
         "textDocument/didChange" => handle_did_change(session, noti.params),

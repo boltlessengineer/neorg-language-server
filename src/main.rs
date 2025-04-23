@@ -53,7 +53,7 @@ fn main() -> Result<()> {
     //     .init();
     let _ = simplelog::WriteLogger::init(log::LevelFilter::Warn, Default::default(), log_file);
     let (connection, iothreads) = Connection::stdio();
-    let server_capabilities = serde_json::to_value(ServerCapabilities {
+    let server_capabilities = ServerCapabilities {
         completion_provider: Some(CompletionOptions {
             resolve_provider: Some(false),
             trigger_characters: Some(vec![]),
@@ -99,9 +99,8 @@ fn main() -> Result<()> {
             }),
         }),
         ..Default::default()
-    })
-    .unwrap();
-    let init_params = connection.initialize(server_capabilities)?;
+    };
+    let init_params = connection.initialize(serde_json::to_value(server_capabilities)?)?;
     let init_params: InitializeParams = serde_json::from_value(init_params)?;
     let workspace = init_params
         .root_uri
