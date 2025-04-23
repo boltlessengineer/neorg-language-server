@@ -10,16 +10,15 @@ use lsp_types::{
 use neorg_dirman::workspace::Workspace;
 
 use crate::{
-    document::{Document, DOC_STORE}, norg::NORG_BLOCKS, state::State, tree_sitter::{Link, ToLspRange}, workspace::WorkspaceExt as _
+    document::Document, norg::NORG_BLOCKS, session::Session, tree_sitter::{Link, ToLspRange}, workspace::WorkspaceExt as _
 };
 
-pub fn handle_completion(req: lsp_server::Request) -> Response {
+pub fn handle_completion(session: &mut Session, req: lsp_server::Request) -> Response {
     let params: CompletionParams = serde_json::from_value(req.params).unwrap();
     let uri = params.text_document_position.text_document.uri;
     let pos = params.text_document_position.position;
     error!("pos: {pos:?}");
-    let doc_store = DOC_STORE.get().unwrap().lock().unwrap();
-    let doc = doc_store.get(&uri).unwrap();
+    let doc = session.get_document(&uri).unwrap();
     let node = doc.get_node_from_range(pos).expect("can't get node");
     error!("{}", node.to_sexp());
     let list = CompletionList {
@@ -115,27 +114,25 @@ fn tree_to_symbols(cursor: &mut ::tree_sitter::TreeCursor, text: &[u8]) -> Vec<D
     return symbols;
 }
 
-pub fn handle_document_symbol(req: lsp_server::Request) -> Response {
+pub fn handle_document_symbol(session: &Session, req: lsp_server::Request) -> Response {
     error!("document symbol");
     let params: DocumentSymbolParams = serde_json::from_value(req.params).unwrap();
     let uri = params.text_document.uri;
-    let doc_store = DOC_STORE.get().unwrap().lock().unwrap();
-    let doc = doc_store.get(&uri).unwrap();
+    let doc = session.get_document(&uri).unwrap();
     let doc_text = doc.text.to_string();
     let symbols = tree_to_symbols(&mut doc.tree.walk(), doc_text.as_bytes());
     return Response::new_ok(req.id, serde_json::to_value(symbols).unwrap());
 }
 
-pub fn handle_definition(state: &State, req: lsp_server::Request) -> Response {
+pub fn handle_definition(session: &Session, req: lsp_server::Request) -> Response {
     error!("goto definition");
-    let Some(ref workspace) = state.workspace else {
+    let Some(ref workspace) = session.workspace else {
         todo!()
     };
     let params: GotoDefinitionParams = serde_json::from_value(req.params).unwrap();
     let req_uri = params.text_document_position_params.text_document.uri;
     let req_pos = params.text_document_position_params.position;
-    let doc_store = DOC_STORE.get().unwrap().lock().unwrap();
-    let doc = doc_store.get(&req_uri).unwrap();
+    let doc = session.get_document(&req_uri).unwrap();
     if let Some(link) = doc.get_link_from_pos(req_pos) {
         error!("{link:?}");
         match workspace.resolve_link_location(&req_uri, &link.destination) {
@@ -158,19 +155,14 @@ pub fn handle_definition(state: &State, req: lsp_server::Request) -> Response {
     }
 }
 
-pub fn handle_references(state: &State, req: lsp_server::Request) -> Response {
-    let Some(ref workspace) = state.workspace else {
+pub fn handle_references(session: &Session, req: lsp_server::Request) -> Response {
+    let Some(ref workspace) = session.workspace else {
         todo!()
     };
     let params: ReferenceParams = serde_json::from_value(req.params).unwrap();
     let req_uri = params.text_document_position.text_document.uri;
     let req_pos = params.text_document_position.position;
-    let link_from_pos = {
-        // access DOC_STORE from scope to prevent deadlock
-        let doc_store = DOC_STORE.get().unwrap().lock().unwrap();
-        let doc = doc_store.get(&req_uri).unwrap();
-        doc.get_link_from_pos(req_pos)
-    };
+    let link_from_pos = session.get_document(&req_uri).unwrap().get_link_from_pos(req_pos);
     if let Some(link) = link_from_pos {
         error!("{link:?}");
         match workspace.resolve_link_location(&req_uri, &link.destination) {
@@ -216,9 +208,9 @@ fn iter_links(workspace: &Workspace) -> impl Iterator<Item = (Url, Link)> {
         .flat_map(|(url, d)| d.links.into_iter().map(move |l| (url.clone(), l)))
 }
 
-pub fn handle_will_rename_files(state: &State, req: lsp_server::Request) -> Response {
+pub fn handle_will_rename_files(session: &Session, req: lsp_server::Request) -> Response {
     error!("willrename");
-    let Some(ref workspace) = state.workspace else {
+    let Some(ref workspace) = session.workspace else {
         // return Response::new_err(req.id, code, message)
         todo!()
     };

@@ -1,11 +1,6 @@
-use std::{
-    collections::HashMap,
-    path::Path,
-    sync::{Arc, Mutex, OnceLock},
-};
+use std::path::Path;
 
 use log::error;
-use lsp_types::Url;
 use ropey::Rope;
 use tree_sitter::{InputEdit, Parser, Tree};
 
@@ -94,10 +89,4 @@ impl Document {
             .unwrap();
         self.links = capture_links(self.tree.root_node(), self.text.slice(..));
     }
-}
-
-pub static DOC_STORE: OnceLock<Arc<Mutex<HashMap<Url, Document>>>> = OnceLock::new();
-
-pub fn init_doc_store() {
-    DOC_STORE.set(Arc::new(Mutex::new(HashMap::new()))).unwrap();
 }

@@ -1,7 +1,7 @@
 mod document;
 mod handlers;
 mod norg;
-mod state;
+mod session;
 mod tree_sitter;
 mod workspace;
 
@@ -17,22 +17,22 @@ use lsp_types::{
     WorkspaceFoldersServerCapabilities, WorkspaceServerCapabilities,
 };
 use neorg_dirman::workspace::Workspace;
-use state::State;
+use session::Session;
 
 use crate::{
-    document::init_doc_store,
     handlers::{handle_noti, handle_req},
     norg::init_norg_completion,
 };
 
-fn main_loop(connection: Connection, state: State) -> Result<()> {
+fn main_loop(connection: Connection, mut session: Session) -> Result<()> {
     error!("Server Initialized!!");
     for msg in &connection.receiver {
         error!("connection received msg: {:?}", msg);
+        // TODO: handle message asynchronously
         let resp = match msg {
-            Message::Request(req) => handle_req(&state, req),
+            Message::Request(req) => handle_req(&mut session, req),
             Message::Response(_) => continue,
-            Message::Notification(noti) => handle_noti(noti),
+            Message::Notification(noti) => handle_noti(&mut session, noti),
         };
         if let Some(resp) = resp {
             connection.sender.send(Message::Response(resp))?;
@@ -43,7 +43,6 @@ fn main_loop(connection: Connection, state: State) -> Result<()> {
 
 fn main() -> Result<()> {
     init_norg_completion();
-    init_doc_store();
     let log_file = File::options()
         .create(true)
         .append(true)
@@ -110,8 +109,8 @@ fn main() -> Result<()> {
         .filter(|uri| uri.scheme() == "file")
         .and_then(|uri| uri.to_file_path().ok())
         .map(Workspace::from);
-    let state = State::new(workspace);
-    main_loop(connection, state)?;
+    let session = Session::with_workspace(workspace);
+    main_loop(connection, session)?;
     iothreads.join()?;
     warn!("shut down");
     Ok(())
