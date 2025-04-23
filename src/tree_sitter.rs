@@ -300,10 +300,6 @@ pub fn capture_links(node: Node<'_>, slice: RopeSlice<'_>) -> Vec<Link> {
 }
 
 impl Document {
-    pub fn get_node_from_range<P: PositionTrait>(&self, pos: P) -> Option<Node<'_>> {
-        let root = self.tree.root_node();
-        root.descendant_for_point_range(pos.as_ts_point(), pos.as_ts_point())
-    }
     pub fn get_named_node_from_pos<P: PositionTrait>(&self, pos: P) -> Option<Node<'_>> {
         let root = self.tree.root_node();
         root.named_descendant_for_point_range(pos.as_ts_point(), pos.as_ts_point())
@@ -380,8 +376,8 @@ mod test {
             line: 2,
             character: 0,
         };
-        let node = doc.get_node_from_range(pos).unwrap();
-        println!("{}", node.to_sexp());
+        let node = doc.get_named_node_from_pos(pos).unwrap();
+        assert_eq!(node.kind(), "ranged_tag");
     }
 
     #[test]

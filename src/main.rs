@@ -1,6 +1,5 @@
 mod document;
 mod handlers;
-mod norg;
 mod session;
 mod tree_sitter;
 mod workspace;
@@ -19,10 +18,7 @@ use lsp_types::{
 use neorg_dirman::workspace::Workspace;
 use session::Session;
 
-use crate::{
-    handlers::{handle_noti, handle_req},
-    norg::init_norg_completion,
-};
+use crate::handlers::{handle_noti, handle_req};
 
 fn main_loop(connection: Connection, mut session: Session) -> Result<()> {
     error!("Server Initialized!!");
@@ -42,7 +38,6 @@ fn main_loop(connection: Connection, mut session: Session) -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    init_norg_completion();
     let log_file = File::options()
         .create(true)
         .append(true)

@@ -3,62 +3,18 @@ use std::collections::HashMap;
 use log::error;
 use lsp_server::Response;
 use lsp_types::{
-    CompletionItem, CompletionList, CompletionParams, DocumentSymbol, DocumentSymbolParams,
-    Documentation, GotoDefinitionParams, GotoDefinitionResponse, InsertTextFormat, Location,
+    DocumentSymbol, DocumentSymbolParams,
+    GotoDefinitionParams, GotoDefinitionResponse, Location,
     ReferenceParams, RenameFilesParams, Url,
 };
 use neorg_dirman::workspace::Workspace;
 
 use crate::{
     document::Document,
-    norg::NORG_BLOCKS,
     session::Session,
     tree_sitter::{Link, ToLspRange},
     workspace::WorkspaceExt as _,
 };
-
-pub fn handle_completion(session: &mut Session, req: lsp_server::Request) -> Response {
-    let params: CompletionParams = serde_json::from_value(req.params).unwrap();
-    let node = session
-        .get_document(&params.text_document_position.text_document.uri)
-        .unwrap()
-        .get_node_from_range(params.text_document_position.position)
-        .expect("can't get node");
-    let list = CompletionList {
-        is_incomplete: true,
-        items: NORG_BLOCKS
-            .get()
-            .unwrap()
-            .iter()
-            .filter(|item| {
-                let mut node = node;
-                let skip = vec!["paragraph", "para_break"];
-                if item.valid_parents.len() == 0 {
-                    return true;
-                }
-                while skip.contains(&node.kind()) {
-                    if let Some(parent) = node.parent() {
-                        node = parent
-                    } else {
-                        break;
-                    }
-                }
-                return item
-                    .valid_parents
-                    .contains(&node.kind().to_string().clone());
-            })
-            .map(|item| CompletionItem {
-                label: item.name.clone(),
-                kind: Some(item.kind),
-                documentation: Some(Documentation::String(item.desc.clone())),
-                insert_text_format: Some(InsertTextFormat::SNIPPET),
-                insert_text: Some(item.text.clone()),
-                ..Default::default()
-            })
-            .collect(),
-    };
-    return Response::new_ok(req.id, list);
-}
 
 fn tree_to_symbols(cursor: &mut ::tree_sitter::TreeCursor, text: &[u8]) -> Vec<DocumentSymbol> {
     let node = cursor.node();

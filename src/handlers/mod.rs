@@ -5,7 +5,7 @@ use crate::session::Session;
 use self::{
     notification::{handle_did_change, handle_did_close, handle_did_open},
     request::{
-        handle_completion, handle_definition, handle_document_symbol, handle_references,
+        handle_definition, handle_document_symbol, handle_references,
         handle_will_rename_files,
     },
 };
@@ -16,7 +16,7 @@ mod request;
 pub fn handle_req(session: &mut Session, req: lsp_server::Request) -> Option<lsp_server::Response> {
     error!("{}", req.method);
     match req.method.as_str() {
-        "textDocument/completion" => Some(handle_completion(session, req)),
+        // "textDocument/completion" => todo!(),
         "textDocument/documentSymbol" => Some(handle_document_symbol(session, req)),
         "textDocument/definition" => Some(handle_definition(session, req)),
         "textDocument/references" => Some(handle_references(session, req)),
