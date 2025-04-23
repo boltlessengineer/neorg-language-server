@@ -6,7 +6,38 @@ use tree_sitter::{Node, Query, QueryCursor, StreamingIterator, TextProvider};
 
 use crate::document::Document;
 
-pub trait PositionTrait {
+// TODO: replace these traits with actual internal structs
+pub trait RangeTrait {
+    type Pos: PositionTrait;
+    fn start(&self) -> Self::Pos;
+    fn end(&self) -> Self::Pos;
+}
+
+impl RangeTrait for tree_sitter::Range {
+    type Pos = tree_sitter::Point;
+
+    fn start(&self) -> Self::Pos {
+        self.start_point
+    }
+
+    fn end(&self) -> Self::Pos {
+        self.end_point
+    }
+}
+
+impl RangeTrait for lsp_types::Range {
+    type Pos = lsp_types::Position;
+
+    fn start(&self) -> Self::Pos {
+        self.start
+    }
+
+    fn end(&self) -> Self::Pos {
+        self.end
+    }
+}
+
+pub trait PositionTrait: Copy {
     fn line(&self) -> usize;
     fn col(&self) -> usize;
     fn as_ts_point(&self) -> tree_sitter::Point {
@@ -37,6 +68,22 @@ impl PositionTrait for tree_sitter::Point {
     }
     fn col(&self) -> usize {
         self.column
+    }
+}
+
+// I want all PositionTraits to automatically implement RangeTrait
+impl<P> RangeTrait for P
+where
+    P: PositionTrait
+{
+    type Pos = P;
+
+    fn start(&self) -> Self::Pos {
+        *self
+    }
+
+    fn end(&self) -> Self::Pos {
+        *self
     }
 }
 
@@ -300,9 +347,9 @@ pub fn capture_links(node: Node<'_>, slice: RopeSlice<'_>) -> Vec<Link> {
 }
 
 impl Document {
-    pub fn get_named_node_from_pos<P: PositionTrait>(&self, pos: P) -> Option<Node<'_>> {
+    pub fn get_named_node_from_range<R: RangeTrait>(&self, range: R) -> Option<Node<'_>> {
         let root = self.tree.root_node();
-        root.named_descendant_for_point_range(pos.as_ts_point(), pos.as_ts_point())
+        root.named_descendant_for_point_range(range.start().as_ts_point(), range.end().as_ts_point())
     }
     /// get specific kind of parent node from position
     pub fn get_kind_node_from_pos<P: PositionTrait>(
@@ -311,7 +358,7 @@ impl Document {
         kind: &str,
         until: Vec<&str>,
     ) -> Option<Node<'_>> {
-        let current_node = self.get_named_node_from_pos(pos)?;
+        let current_node = self.get_named_node_from_range(pos)?;
         let mut cursor = current_node.walk();
         loop {
             if cursor.node().kind() == kind {
@@ -376,7 +423,7 @@ mod test {
             line: 2,
             character: 0,
         };
-        let node = doc.get_named_node_from_pos(pos).unwrap();
+        let node = doc.get_named_node_from_range(pos).unwrap();
         assert_eq!(node.kind(), "ranged_tag");
     }
 
