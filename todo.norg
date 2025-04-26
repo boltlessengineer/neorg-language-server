@@ -1,0 +1,64 @@
+LSP use cases discussed on: {https://github.com/nvim-neorg/neorg/issues/513}[nvim-neorg/neorg#513]
+
+- ( ) avoid `println!` macro with clippy
+- (x) include neorg-dirman as rust workspace child
+- (x) remove global workspace manager. current workspace should be saved in global server state
+-- (_) when parsing links, include the origin URL (or path)
+-- (x) actually remove the `WS_MANAGER`
+- (x) remove global document store (remove `DOC_STORE`)
+- (x) reimplement references (copy from [markdown-oxide])
+-- (x) change `Link` to enum: `Linkable`
+-- (x) implement `iter_linkables()` for `Document`
+-- ( ) compare resolved links instead of directly comparing linkables
+- ( ) implement linkable completion
+- ( ;# low) rename `NorgWorkspace` to `Vault` or sth. to distinguish from LSP's `Workspace`
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+* Neorg-ls
+
+** Code Actions
+
+   - ( ) higher/lower section level
+   - ( ) extract section to separate file
+   - ( ) update todo state
+
+** Formatting
+
+   - ( ) on type formatting
+   - ( ) range formatting
+
+* Norg-fmt
+
+* Link rules
+
+  - headings in standard ranged tags are ignored
+  - but you can link to outer object from standard ranged tag (WTH)
+
+* Links
+
+- {https://github.com/Feel-ix-343/markdown-oxide}[markdown-oxide]
+-- {https://github.com/Feel-ix-343/markdown-oxide/issues/95}[Issue list about minimum neovim setup]
