@@ -1,5 +1,7 @@
 mod document;
 mod handlers;
+mod neorg;
+mod norg;
 mod session;
 mod tree_sitter;
 mod workspace;

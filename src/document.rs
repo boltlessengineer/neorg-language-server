@@ -2,18 +2,25 @@ use std::path::Path;
 
 use log::error;
 use ropey::Rope;
-use tree_sitter::{InputEdit, Parser, Tree};
+use tree_sitter::{InputEdit, Parser, QueryCursor, StreamingIterator, Tree};
 
-use crate::tree_sitter::{capture_links, Link};
+use crate::{
+    norg::{LinkDestination, Linkable},
+    tree_sitter::{new_norg3_query, PositionTrait, RangeTrait, RopeProvider},
+};
+
+#[derive(Debug, Clone)]
+pub struct ResolvedLinkable {
+    // TODO: target should just be lsp_types::Location
+    pub target: LinkDestination,
+}
 
 #[derive(Debug, Clone)]
 pub struct Document {
     pub text: Rope,
     pub tree: Tree,
-    // TODO: linkable symbols (e.g. headings) as Vec<Symbol>
-    // cached on didChange event
-    // headings inside standard ranged tags are ignored
-    pub links: Vec<Link>,
+    // TODO: linkable symbols (e.g. headings) as Vec<Symbol> cached on document change
+    pub links: Vec<ResolvedLinkable>,
 }
 
 impl Document {
@@ -25,15 +32,14 @@ impl Document {
             .set_language(&tree_sitter_norg::LANGUAGE.into())
             .expect("could not load norg parser");
         let tree = parser.parse(&text, None).unwrap();
-        let links = capture_links(tree.root_node(), rope.slice(..));
-        return Self {
+        let links = vec![];
+        let mut doc = Self {
             text: rope,
             tree,
             links,
         };
-    }
-    pub fn from_path(path: &Path) -> anyhow::Result<Self> {
-        Ok(Document::new(&std::fs::read_to_string(path)?))
+        doc.links = doc.resolved_linkables();
+        doc
     }
     fn edit_from_range(&mut self, range: lsp_types::Range, insert: &str) -> InputEdit {
         let start_byte =
@@ -87,6 +93,165 @@ impl Document {
         self.tree = parser
             .parse(self.text.to_string(), Some(&self.tree))
             .unwrap();
-        self.links = capture_links(self.tree.root_node(), self.text.slice(..));
+        self.links = self.resolved_linkables();
+    }
+
+    pub fn iter_linkables(&self) -> impl Iterator<Item = Linkable> {
+        let query_str = r#"
+            ; query
+            [
+              (link)
+              (anchor)
+            ] @linkable
+        "#;
+        let query = new_norg3_query(query_str);
+        let mut qry_cursor = QueryCursor::new();
+        let mut matches = qry_cursor.matches(
+            &query,
+            self.tree.root_node(),
+            RopeProvider::from(&self.text),
+        );
+        // TODO: avoid collecting
+        let mut links = vec![];
+        while let Some(mat) = matches.next() {
+            links.extend(mat.captures.iter().map(|cap| cap.node).filter_map(|node| {
+                Linkable::try_from_node(node, self.text.to_string().as_bytes()).ok()
+            }));
+        }
+        links.into_iter()
+    }
+
+    // TODO: this is most horrible structure I've ever made. refactor everything later
+    pub fn local_resolve_linkable(&self, linkable: Linkable) -> Result<ResolvedLinkable, ()> {
+        match linkable {
+            Linkable::Link {
+                target,
+                ..
+            } => Ok(ResolvedLinkable {
+                target: target.clone(),
+            }),
+            Linkable::Anchor {
+                target: Some(target),
+                ..
+            } => Ok(ResolvedLinkable {
+                target: target.clone(),
+            }),
+            Linkable::Anchor {
+                target: None,
+                ..
+            } => {
+                let target = self
+                    .iter_linkables()
+                    .find_map(|linkable| {
+                        let Linkable::Anchor {
+                            target: Some(target),
+                            ..
+                        } = linkable
+                        else {
+                            return None;
+                        };
+                        Some(target)
+                    })
+                    .unwrap()
+                    .clone();
+                Ok(ResolvedLinkable {
+                    target,
+                })
+            }
+        }
+    }
+
+    pub fn resolved_linkables(&self) -> Vec<ResolvedLinkable> {
+        let linkables: Vec<_> = self.iter_linkables().collect();
+        let mut resolved = vec![];
+        for linkable in linkables.iter() {
+            resolved.push(match linkable {
+                Linkable::Link { target, .. } => {
+                    ResolvedLinkable {
+                        target: target.clone(),
+                    }
+                },
+                Linkable::Anchor { target: Some(target), .. } => {
+                    ResolvedLinkable {
+                        target: target.clone(),
+                    }
+                },
+                Linkable::Anchor { target: None, .. } => {
+                    let target = linkables.iter().find_map(|linkable| {
+                        let Linkable::Anchor { target: Some(target), .. } = linkable else {
+                            return None;
+                        };
+                        Some(target)
+                    });
+                    let Some(target) = target else {
+                        continue;
+                    };
+                    let target = target.clone();
+                    ResolvedLinkable { target }
+                },
+            })
+        }
+        resolved
+    }
+
+    pub fn find_linkable_from_pos<R: RangeTrait>(&self, range: R) -> Option<Linkable> {
+        let root = self.tree.root_node();
+        let current_node = root.named_descendant_for_point_range(
+            range.start().as_ts_point(),
+            range.end().as_ts_point(),
+        )?;
+        let mut cursor = current_node.walk();
+        loop {
+            let node = cursor.node();
+            match node.kind() {
+                "link" | "anchor" => {
+                    return Some(
+                        Linkable::try_from_node(node, self.text.to_string().as_bytes()).unwrap(),
+                    )
+                }
+                "paragraph" => break,
+                _ => {
+                    // HACK: `!cursor.goto_parent()` doesn't work on node as field content
+                    if let Some(parent) = node.parent() {
+                        cursor = parent.walk();
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+        None
+    }
+    pub fn find_referenceable_from_pos<R: RangeTrait>(&self, range: R) -> Option<()> {
+        let root = self.tree.root_node();
+        let current_node = root.named_descendant_for_point_range(
+            range.start().as_ts_point(),
+            range.end().as_ts_point(),
+        )?;
+        let mut cursor = current_node.walk();
+        loop {
+            let node = cursor.node();
+            match node.kind() {
+                "heading" => {
+                    todo!()
+                }
+                _ => {
+                    // HACK: `!cursor.goto_parent()` doesn't work on node as field content
+                    if let Some(parent) = node.parent() {
+                        cursor = parent.walk();
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+        None
+    }
+}
+
+impl TryFrom<&Path> for Document {
+    type Error = std::io::Error;
+    fn try_from(path: &Path) -> Result<Self, Self::Error> {
+        Ok(Document::new(&std::fs::read_to_string(path)?))
     }
 }

@@ -1,7 +1,7 @@
 use lsp_types::Url;
 use neorg_dirman::workspace::Workspace;
 
-use crate::tree_sitter::{LinkDestination, LinkWorkspace, NorgFile};
+use crate::{document::Document, norg::{LinkDestination, LinkWorkspace, Linkable, NorgFile}};
 
 pub trait WorkspaceExt {
     fn get_url(&self) -> Result<Url, ()>;
@@ -10,6 +10,10 @@ pub trait WorkspaceExt {
         origin: &Url,
         link: &LinkDestination,
     ) -> Option<lsp_types::Location>;
+    fn iter_linkables_with(
+        &self,
+        doc_provider: impl Fn(&Url) -> Option<Document>
+    ) -> impl Iterator<Item = (Url, Linkable)>;
 }
 
 impl WorkspaceExt for Workspace {
@@ -63,5 +67,21 @@ impl WorkspaceExt for Workspace {
                 unimplemented!("scope is not implemented yet")
             }
         })
+    }
+    // TODO: fix: this should iterate through resolved linkables
+    fn iter_linkables_with(
+        &self,
+        doc_provider: impl Fn(&Url) -> Option<Document>,
+    ) -> impl Iterator<Item = (Url, Linkable)> {
+        self.iter_files()
+            .flat_map(move |path| {
+                let url = Url::from_file_path(path).ok()?;
+                let doc = doc_provider(&url)?;
+                Some((url, doc))
+            })
+            .flat_map(|(url, doc)| {
+                doc.iter_linkables()
+                    .map(move |linkable| (url.clone(), linkable))
+            })
     }
 }

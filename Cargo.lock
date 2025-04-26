@@ -257,6 +257,7 @@ dependencies = [
  "serde",
  "serde_json",
  "simplelog",
+ "streaming-iterator",
  "structured-logger",
  "tree-sitter",
  "tree-sitter-norg",
