@@ -76,7 +76,10 @@ impl WorkspaceExt for Workspace {
         self.iter_files()
             .flat_map(move |path| {
                 let url = Url::from_file_path(path).ok()?;
-                let doc = doc_provider(&url)?;
+                let doc = doc_provider(&url).or({
+                    let path = url.to_file_path().ok()?;
+                    Document::try_from(path.as_path()).ok()
+                })?;
                 Some((url, doc))
             })
             .flat_map(|(url, doc)| {
