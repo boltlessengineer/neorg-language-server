@@ -6,7 +6,7 @@ use tree_sitter::{InputEdit, Parser, QueryCursor, StreamingIterator, Tree};
 
 use crate::{
     norg::{LinkDestination, Linkable},
-    tree_sitter::{new_norg3_query, PositionTrait, RangeTrait, RopeProvider},
+    tree_sitter::{new_norg3_query, PositionTrait, RangeTrait, RopeProvider, ToLspRange as _},
 };
 
 #[derive(Debug, Clone)]
@@ -247,6 +247,12 @@ impl Document {
         }
         None
     }
+
+    pub fn get_symbol_tree(&self) -> Vec<lsp_types::DocumentSymbol> {
+        let mut cursor = self.tree.walk();
+        let bytes: Vec<_> = self.text.bytes().collect();
+        tree_to_symbols(&mut cursor, &bytes)
+    }
 }
 
 impl TryFrom<&Path> for Document {
@@ -254,4 +260,60 @@ impl TryFrom<&Path> for Document {
     fn try_from(path: &Path) -> Result<Self, Self::Error> {
         Ok(Document::new(&std::fs::read_to_string(path)?))
     }
+}
+
+fn tree_to_symbols(cursor: &mut ::tree_sitter::TreeCursor, text: &[u8]) -> Vec<lsp_types::DocumentSymbol> {
+    let node = cursor.node();
+    let mut symbols: Vec<lsp_types::DocumentSymbol> = vec![];
+    if node.is_named() {
+        match node.kind() {
+            "document" => {
+                cursor.goto_first_child();
+                return tree_to_symbols(cursor, text);
+            }
+            "section" => {
+                // TODO: return range that can used for `name` and `selection_range`
+                // also should return the symbol type
+                let title_node = node
+                    .child_by_field_name("heading")
+                    .unwrap()
+                    .child_by_field_name("title")
+                    .unwrap();
+                let title = title_node.utf8_text(text).unwrap();
+                Some(title.to_string())
+            }
+            // TODO: add more symbols. (if final syntax has more than headings)
+            _ => None,
+        }
+        .map(|name| {
+            let range = node.range().to_lsp_range();
+            #[allow(deprecated)]
+            let sym = lsp_types::DocumentSymbol {
+                name,
+                detail: Some(node.utf8_text(text).unwrap().to_string()),
+                kind: lsp_types::SymbolKind::STRUCT,
+                tags: None,
+                range,
+                selection_range: range,
+                children: if cursor.goto_first_child() {
+                    let children = tree_to_symbols(cursor, text);
+                    if children.len() > 0 {
+                        Some(children)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                },
+                deprecated: None,
+            };
+            symbols.push(sym);
+        });
+    }
+    if cursor.goto_next_sibling() {
+        symbols.append(&mut tree_to_symbols(cursor, text));
+    } else {
+        cursor.goto_parent();
+    }
+    return symbols;
 }
