@@ -13,6 +13,7 @@ use crate::{
 pub struct ResolvedLinkable {
     // TODO: target should just be lsp_types::Location
     pub target: LinkDestination,
+    pub range: tree_sitter::Range,
 }
 
 #[derive(Debug, Clone)]
@@ -126,18 +127,23 @@ impl Document {
         match linkable {
             Linkable::Link {
                 target,
+                range,
                 ..
             } => Ok(ResolvedLinkable {
                 target: target.clone(),
+                range,
             }),
             Linkable::Anchor {
                 target: Some(target),
+                range,
                 ..
             } => Ok(ResolvedLinkable {
                 target: target.clone(),
+                range,
             }),
             Linkable::Anchor {
                 target: None,
+                range,
                 ..
             } => {
                 let target = self
@@ -156,6 +162,7 @@ impl Document {
                     .clone();
                 Ok(ResolvedLinkable {
                     target,
+                    range,
                 })
             }
         }
@@ -166,17 +173,19 @@ impl Document {
         let mut resolved = vec![];
         for linkable in linkables.iter() {
             resolved.push(match linkable {
-                Linkable::Link { target, .. } => {
+                Linkable::Link { target, range, .. } => {
                     ResolvedLinkable {
                         target: target.clone(),
+                        range: *range,
                     }
                 },
-                Linkable::Anchor { target: Some(target), .. } => {
+                Linkable::Anchor { target: Some(target), range, .. } => {
                     ResolvedLinkable {
                         target: target.clone(),
+                        range: *range,
                     }
                 },
-                Linkable::Anchor { target: None, .. } => {
+                Linkable::Anchor { target: None, range, .. } => {
                     let target = linkables.iter().find_map(|linkable| {
                         let Linkable::Anchor { target: Some(target), .. } = linkable else {
                             return None;
@@ -187,7 +196,10 @@ impl Document {
                         continue;
                     };
                     let target = target.clone();
-                    ResolvedLinkable { target }
+                    ResolvedLinkable {
+                        target,
+                        range: *range,
+                    }
                 },
             })
         }

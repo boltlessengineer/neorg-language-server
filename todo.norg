@@ -9,7 +9,9 @@ LSP use cases discussed on: {https://github.com/nvim-neorg/neorg/issues/513}[nvi
 - (x) reimplement references (copy from [markdown-oxide])
 -- (x) change `Link` to enum: `Linkable`
 -- (x) implement `iter_linkables()` for `Document`
--- ( ) compare resolved links instead of directly comparing linkables
+-- (x) compare resolved links instead of directly comparing linkables
+-- ( ) generalize range metadata with `Mark<T>`
+-- ( ) integrate with `norg-rs` crate. separate parsing logic.
 - ( ) implement linkable completion
 - ( ;# low) rename `NorgWorkspace` to `Vault` or sth. to distinguish from LSP's `Workspace`
 

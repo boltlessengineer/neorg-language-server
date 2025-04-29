@@ -22,22 +22,21 @@ pub fn references(session: &Session, req_uri: Url, pos: Position) -> Option<Vec<
     //    current location
     let doc = session.get_document(&req_uri).unwrap();
     if let Some(linkable) = doc.find_linkable_from_pos(pos) {
-        // let Ok(resolved_linkable) = doc.local_resolve_linkable(linkable) else {
-        //     return None;
-        // };
+        let Ok(resolved_linkable) = doc.local_resolve_linkable(linkable) else {
+            return None;
+        };
+        let req_loc = workspace.resolve_link_location(&req_uri, &resolved_linkable.target);
         // 2-a. for all documents in workspace, find all references that matches the given reference
         Some(
             workspace
                 .iter_linkables_with(|uri| {
                     session.get_document(uri).cloned()
                 })
-                .filter(|(_url, link)| {
-                    // TODO: fix this. don't compare linkables. compare resolved location
-                    *link == linkable
-                    // workspace.resolve_link_location(&uri, &link.target)
-                    //     == workspace.resolve_link_location(&req_uri, &resolved_linkable.target)
+                .filter(|(uri, link)| {
+                    workspace.resolve_link_location(&uri, &link.target)
+                        == req_loc
                 })
-                .map(|(uri, link)| Location::new(uri.clone(), link.range().to_lsp_range()))
+                .map(|(uri, link)| Location::new(uri.clone(), link.range.to_lsp_range()))
                 .collect(),
         )
     } else if let Some(_referencable) = doc.find_referenceable_from_pos(pos) {
