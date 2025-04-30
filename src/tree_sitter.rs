@@ -1,5 +1,13 @@
 use ropey::{Rope, RopeSlice};
-use tree_sitter::{Node, Query, TextProvider};
+use tree_sitter::{Node, Parser, Query, TextProvider, Tree};
+
+pub fn parse_norg(text: impl AsRef<[u8]>, old_tree: Option<&Tree>) -> Option<Tree> {
+    let mut parser = Parser::new();
+    parser
+        .set_language(&tree_sitter_norg::LANGUAGE.into())
+        .expect("could not load norg parser");
+    parser.parse(&text, old_tree)
+}
 
 // TODO: replace these traits with actual internal structs
 pub trait RangeTrait {

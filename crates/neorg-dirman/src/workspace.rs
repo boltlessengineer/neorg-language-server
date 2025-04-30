@@ -4,6 +4,7 @@ use std::path::PathBuf;
 #[derive(Debug, Clone)]
 pub struct Workspace {
     pub name: String,
+    // TODO: force to use Absolute path by wrapping it to AbsPath struct
     pub path: PathBuf,
 }
 

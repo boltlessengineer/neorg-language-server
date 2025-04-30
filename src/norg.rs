@@ -153,7 +153,7 @@ impl<'a> Iterator for ScopedLinkTargetIterator<'a> {
 }
 
 impl LinkDestination {
-    fn try_from_node<'src>(node: Node<'_>, source: &'src [u8]) -> anyhow::Result<Self> {
+    pub fn try_from_node<'src>(node: Node<'_>, source: &'src [u8]) -> anyhow::Result<Self> {
         match node.kind() {
             "raw_target" => {
                 Ok(Self::Uri(node.utf8_text(source).unwrap().to_string()))

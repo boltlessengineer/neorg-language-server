@@ -2,7 +2,9 @@ mod document;
 mod handlers;
 mod neorg;
 mod norg;
+mod range;
 mod session;
+mod syntax;
 mod tree_sitter;
 mod workspace;
 

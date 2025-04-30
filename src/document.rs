@@ -2,16 +2,16 @@ use std::path::Path;
 
 use log::error;
 use ropey::Rope;
-use tree_sitter::{InputEdit, Parser, QueryCursor, StreamingIterator, Tree};
+use tree_sitter::{InputEdit, QueryCursor, StreamingIterator, Tree};
 
 use crate::{
     norg::{LinkDestination, Linkable},
-    tree_sitter::{new_norg3_query, PositionTrait, RangeTrait, RopeProvider, ToLspRange as _},
+    tree_sitter::{new_norg3_query, parse_norg, RopeProvider, ToLspRange as _},
 };
 
+// TODO: Revisit to this type. I might not need to resolve linkables at all
 #[derive(Debug, Clone)]
 pub struct ResolvedLinkable {
-    // TODO: target should just be lsp_types::Location
     pub target: LinkDestination,
     pub range: tree_sitter::Range,
 }
@@ -28,11 +28,7 @@ impl Document {
     pub fn new(text: &str) -> Self {
         // parse and save tree
         let rope = Rope::from_str(&text);
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_norg::LANGUAGE.into())
-            .expect("could not load norg parser");
-        let tree = parser.parse(&text, None).unwrap();
+        let tree = parse_norg(&text, None).unwrap();
         let links = vec![];
         let mut doc = Self {
             text: rope,
@@ -87,13 +83,7 @@ impl Document {
     /// apply text update to document.
     /// this will re-parse the Tree and capture all links
     pub fn update(&mut self) {
-        let mut parser = Parser::new();
-        parser
-            .set_language(&tree_sitter_norg::LANGUAGE.into())
-            .expect("could not load norg parser");
-        self.tree = parser
-            .parse(self.text.to_string(), Some(&self.tree))
-            .unwrap();
+        self.tree = parse_norg(self.text.to_string(), Some(&self.tree)).unwrap();
         self.links = self.resolved_linkables();
     }
 
@@ -120,52 +110,6 @@ impl Document {
             }));
         }
         links.into_iter()
-    }
-
-    // TODO: this is most horrible structure I've ever made. refactor everything later
-    pub fn local_resolve_linkable(&self, linkable: Linkable) -> Result<ResolvedLinkable, ()> {
-        match linkable {
-            Linkable::Link {
-                target,
-                range,
-                ..
-            } => Ok(ResolvedLinkable {
-                target: target.clone(),
-                range,
-            }),
-            Linkable::Anchor {
-                target: Some(target),
-                range,
-                ..
-            } => Ok(ResolvedLinkable {
-                target: target.clone(),
-                range,
-            }),
-            Linkable::Anchor {
-                target: None,
-                range,
-                ..
-            } => {
-                let target = self
-                    .iter_linkables()
-                    .find_map(|linkable| {
-                        let Linkable::Anchor {
-                            target: Some(target),
-                            ..
-                        } = linkable
-                        else {
-                            return None;
-                        };
-                        Some(target)
-                    })
-                    .unwrap()
-                    .clone();
-                Ok(ResolvedLinkable {
-                    target,
-                    range,
-                })
-            }
-        }
     }
 
     pub fn resolved_linkables(&self) -> Vec<ResolvedLinkable> {
@@ -206,64 +150,14 @@ impl Document {
         resolved
     }
 
-    pub fn find_linkable_from_pos<R: RangeTrait>(&self, range: R) -> Option<Linkable> {
-        let root = self.tree.root_node();
-        let current_node = root.named_descendant_for_point_range(
-            range.start().as_ts_point(),
-            range.end().as_ts_point(),
-        )?;
-        let mut cursor = current_node.walk();
-        loop {
-            let node = cursor.node();
-            match node.kind() {
-                "link" | "anchor" => {
-                    return Some(
-                        Linkable::try_from_node(node, self.text.to_string().as_bytes()).unwrap(),
-                    )
-                }
-                "paragraph" => break,
-                _ => {
-                    // HACK: `!cursor.goto_parent()` doesn't work on node as field content
-                    if let Some(parent) = node.parent() {
-                        cursor = parent.walk();
-                    } else {
-                        break;
-                    }
-                }
-            }
-        }
-        None
-    }
-    pub fn find_referenceable_from_pos<R: RangeTrait>(&self, range: R) -> Option<()> {
-        let root = self.tree.root_node();
-        let current_node = root.named_descendant_for_point_range(
-            range.start().as_ts_point(),
-            range.end().as_ts_point(),
-        )?;
-        let mut cursor = current_node.walk();
-        loop {
-            let node = cursor.node();
-            match node.kind() {
-                "heading" => {
-                    todo!()
-                }
-                _ => {
-                    // HACK: `!cursor.goto_parent()` doesn't work on node as field content
-                    if let Some(parent) = node.parent() {
-                        cursor = parent.walk();
-                    } else {
-                        break;
-                    }
-                }
-            }
-        }
-        None
-    }
-
     pub fn get_symbol_tree(&self) -> Vec<lsp_types::DocumentSymbol> {
         let mut cursor = self.tree.walk();
         let bytes: Vec<_> = self.text.bytes().collect();
         tree_to_symbols(&mut cursor, &bytes)
+    }
+
+    pub fn find_anchor_definition(&self, _markup: String) -> Option<tree_sitter::Node> {
+        todo!("find anchor definition for given markup")
     }
 }
 

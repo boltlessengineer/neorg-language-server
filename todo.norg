@@ -15,9 +15,50 @@ LSP use cases discussed on: {https://github.com/nvim-neorg/neorg/issues/513}[nvi
 - ( ) implement linkable completion
 - ( ;# low) rename `NorgWorkspace` to `Vault` or sth. to distinguish from LSP's `Workspace`
 
+* definition
 
+@code
+anchor -> anchor definition
+link -> referenceable (file, heading)
+@end
 
+* reference
 
+@code
+linkable | referenceable -> linkable
+@end
+
+* TODO
+
+** linkable
+   @code
+   enum Linkable {
+       AnchorReference { markup: String },
+       AnchorDefinition { markup: String, target: LinkTarget },
+       Link { target: LinkTarget },
+   }
+   @end
+
+** `doc.find_anchor_definition(markup: String) -> Option<LinkTarget>`
+
+*
+wiki-link workflow in my mind:
+@@code
+[neorg]
+
+#hide
+* References
+  #(refs)
+  - [neorg]{:$/doro/neorg}
+  - [typst]{:$/doro/typst}
+  - [commonmark]{:$/doro/commonmark}
+*
+@@end
+
+`#hide` will make auto imported anchor definitions invisible
+
+language-server will find a list with `refs` attribute and put anchor definitions under it.
+*
 
 
 
