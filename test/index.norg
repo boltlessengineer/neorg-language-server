@@ -6,7 +6,7 @@
 * heading...4
   paragraph
   {:folder/foo:}
-  {:./folder/foo:}
+  [asdf]{:./folder/foo:}
   {:$/folder/foo:}
   {:/home/ubuntu/notes/todo:}
   {file:///home/ubuntu/projects/neorg-ls/test/baz.norg}
@@ -16,4 +16,6 @@
 @code
 this is not a link: {:folder/foo:}
 @end
+
+[asdf]
 {file:///home/ubuntu/notes/todo.norg}

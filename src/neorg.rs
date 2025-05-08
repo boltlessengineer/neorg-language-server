@@ -8,7 +8,7 @@ use crate::{
     range::Range,
     session::Session,
     syntax::{classify_for_decl, Syntax},
-    tree_sitter::ToLspRange,
+    tree_sitter::{ToLspRange, ToLspRangeWith as _},
     workspace::WorkspaceExt as _,
 };
 
@@ -36,10 +36,14 @@ pub fn definition(session: &Session, uri: Url, pos: Position) -> Option<Vec<Loca
                     .ok()?;
             follow_link_target(&session, &uri, &target).map(|loc| vec![loc])
         }
-        Syntax::AnchorReference(..) => {
+        Syntax::AnchorReference(node) => {
             // go to anchor definition
-            let _def_node = doc.find_anchor_definition(String::from(""));
-            todo!("go to anchor definition in same document")
+            let markup_node = node.child_by_field_name("markup")?;
+            let markup = markup_node.utf8_text(doc.text.to_string().as_bytes()).unwrap().to_string();
+            let def_node = doc.find_anchor_definition(&markup)?;
+            let loc = Location::new(uri, def_node.range.to_lsp_range_with(&doc.text));
+            log::error!("{loc:?}");
+            Some(vec![loc])
         }
         _ => None,
     }

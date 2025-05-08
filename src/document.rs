@@ -1,12 +1,12 @@
 use std::path::Path;
 
-use log::error;
+use norg_rs::parser::Markup;
 use ropey::Rope;
 use tree_sitter::{InputEdit, QueryCursor, StreamingIterator, Tree};
 
 use crate::{
     norg::{LinkDestination, Linkable},
-    tree_sitter::{new_norg3_query, parse_norg, RopeProvider, ToLspRange as _},
+    tree_sitter::{new_norg3_query, parse_norg, RopeExt, RopeProvider, ToLspRange as _},
 };
 
 // TODO: Revisit to this type. I might not need to resolve linkables at all
@@ -46,9 +46,7 @@ impl Document {
         let new_end_byte = start_byte + insert.len();
         self.text.try_remove(start_byte..end_byte).unwrap();
         self.text.try_insert(start_byte, insert).unwrap();
-        // PERF: calculate end position from inserted text, not whole document
-        let new_end_row = self.text.try_byte_to_line(new_end_byte).unwrap();
-        let new_end_col = self.text.try_byte_to_char(new_end_byte).unwrap();
+        let (new_end_row, new_end_col) = self.text.try_byte_to_pos(new_end_byte).unwrap();
         let edit = InputEdit {
             start_byte,
             old_end_byte: end_byte,
@@ -70,11 +68,6 @@ impl Document {
     }
 
     pub fn change_range(&mut self, range: lsp_types::Range, text: &str) {
-        let start_idx =
-            self.text.line_to_byte(range.start.line as usize) + range.start.character as usize;
-        let end_idx =
-            self.text.line_to_byte(range.end.line as usize) + range.end.character as usize;
-        error!("change range {:?}..{:?}", start_idx, end_idx);
         let edit = self.edit_from_range(range, text);
         // update text
         // edit tree
@@ -156,8 +149,10 @@ impl Document {
         tree_to_symbols(&mut cursor, &bytes)
     }
 
-    pub fn find_anchor_definition(&self, _markup: String) -> Option<tree_sitter::Node> {
-        todo!("find anchor definition for given markup")
+    pub fn find_anchor_definition(&self, markup: &Markup) -> Option<norg_rs::parser::AnchorDefinitionNode> {
+        let ast = norg_rs::parser::parse_tstree(&self.tree, self.text.to_string().as_bytes());
+        let node = ast.anchors.get(markup)?;
+        Some(node.clone())
     }
 }
 

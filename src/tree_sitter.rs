@@ -90,9 +90,42 @@ where
     }
 }
 
+pub(crate) trait RopeExt {
+    fn try_byte_to_pos(&self, byte: usize) -> ropey::Result<(usize, usize)>;
+}
+
+impl RopeExt for Rope {
+    fn try_byte_to_pos(&self, byte: usize) -> ropey::Result<(usize, usize)> {
+        let row = self.try_byte_to_line(byte)?;
+        let col = byte - self.try_line_to_byte(row)?;
+        Ok((row, col))
+    }
+}
+
 pub trait ToLspRange {
     fn to_lsp_range(&self) -> lsp_types::Range;
 }
+pub trait ToLspRangeWith {
+    fn to_lsp_range_with(&self, rope: &Rope) -> lsp_types::Range;
+}
+
+impl ToLspRangeWith for norg_rs::parser::Range {
+    fn to_lsp_range_with(&self, rope: &Rope) -> lsp_types::Range {
+        let start = rope.try_byte_to_pos(self.start).unwrap();
+        let end = rope.try_byte_to_pos(self.end).unwrap();
+        lsp_types::Range {
+            start: lsp_types::Position::new(
+                start.0 as u32,
+                start.1 as u32
+            ),
+            end: lsp_types::Position::new(
+                end.0 as u32,
+                end.1 as u32
+            ),
+        }
+    }
+}
+
 impl ToLspRange for tree_sitter::Range {
     fn to_lsp_range(&self) -> lsp_types::Range {
         lsp_types::Range {
