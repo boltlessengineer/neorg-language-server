@@ -102,7 +102,7 @@ impl ToString for NorgFile {
 impl ToString for LinkWorkspace {
     fn to_string(&self) -> String {
         match self {
-            Self::Current => "$/".to_owned(),
+            Self::Current => "/".to_owned(),
             Self::Workspace(workspace) => format!("!${workspace}/"),
         }
     }
@@ -166,8 +166,10 @@ impl LinkDestination {
                     if iter.peek().ok_or(anyhow!("scope is empty"))?.kind() == "raw_target" {
                         let first = iter.next().unwrap();
                         let raw_path = first.utf8_text(source).unwrap();
-                        let (workspace, path) = if raw_path.starts_with("$/") {
-                            (Some(LinkWorkspace::Current), &raw_path[2..])
+                        let (workspace, path) = if let Some(raw_path) = raw_path.strip_prefix("/") {
+                            (Some(LinkWorkspace::Current), raw_path)
+                        } else if let Some(raw_path) = raw_path.strip_prefix("$/") {
+                            (Some(LinkWorkspace::Current), raw_path)
                         } else if raw_path.starts_with("$") {
                             let name = Path::new(&raw_path[1..])
                                 .iter()
