@@ -111,7 +111,7 @@ pub fn follow_link_target(
             file: Some(NorgFile { root, path }),
             scope: _,
         } => {
-            let real_path = if !path.ends_with("norg") {
+            let real_path = if !path.ends_with(".norg") {
                 path.clone() + ".norg"
             } else {
                 path.clone()
