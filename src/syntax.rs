@@ -9,7 +9,7 @@ pub fn classify_for_decl(tree: &Tree, position: Position) -> Option<Syntax> {
     classify_node(node)
 }
 
-pub fn classify_node(node: Node) -> Option<Syntax> {
+fn classify_node(node: Node) -> Option<Syntax> {
     let syntax_fn = match node.kind() {
         "section" => Syntax::Section,
         "link" => Syntax::Link,

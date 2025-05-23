@@ -110,17 +110,14 @@ impl Document {
         let mut resolved = vec![];
         for linkable in linkables.iter() {
             resolved.push(match linkable {
-                Linkable::Link { target, range, .. } => {
-                    ResolvedLinkable {
-                        target: target.clone(),
-                        range: *range,
-                    }
-                },
-                Linkable::Anchor { target: Some(target), range, .. } => {
-                    ResolvedLinkable {
-                        target: target.clone(),
-                        range: *range,
-                    }
+                Linkable::Link { target, range, .. }
+                | Linkable::Anchor {
+                    target: Some(target),
+                    range,
+                    ..
+                } => ResolvedLinkable {
+                    target: target.clone(),
+                    range: *range,
                 },
                 Linkable::Anchor { target: None, range, .. } => {
                     let target = linkables.iter().find_map(|linkable| {
