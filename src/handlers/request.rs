@@ -1,8 +1,7 @@
 use log::error;
 use lsp_server::Response;
 use lsp_types::{
-    DocumentSymbolParams,
-    GotoDefinitionParams, GotoDefinitionResponse, ReferenceParams,
+    CompletionParams, DocumentSymbolParams, GotoDefinitionParams, GotoDefinitionResponse, ReferenceParams
 };
 
 use crate::{neorg, session::Session};
@@ -51,6 +50,19 @@ pub fn handle_references(session: &Session, req: lsp_server::Request) -> Respons
             "reference not found".to_string(),
         ),
     }
+}
+
+pub fn handle_completion(session: &Session, req: lsp_server::Request) -> Response {
+    error!("handle_completion");
+    let params: CompletionParams = serde_json::from_value(req.params).unwrap();
+    let req_uri = params.text_document_position.text_document.uri;
+    let req_pos = params.text_document_position.position;
+    neorg::completion(session, req_uri, req_pos);
+    Response::new_err(
+        req.id,
+        lsp_server::ErrorCode::RequestFailed as i32,
+        "uhhhhh".to_string(),
+    )
 }
 
 // pub fn handle_will_rename_files(session: &Session, req: lsp_server::Request) -> Response {

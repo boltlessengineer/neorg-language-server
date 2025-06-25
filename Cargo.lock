@@ -885,7 +885,7 @@ checksum = "c4013970217383f67b18aef68f6fb2e8d409bc5755227092d32efb0422ba24b8"
 [[package]]
 name = "tree-sitter-norg"
 version = "0.0.1"
-source = "git+https://github.com/boltlessengineer/tree-sitter-norg3-pr1?branch=experiment#bcb2614e6e7818bc22e2aafa0b615487b4111f58"
+source = "git+https://github.com/boltlessengineer/tree-sitter-norg3-pr1?branch=experiment#8b9f7b9c3ac9cc1eef0f03cfa99e83754a6bf067"
 dependencies = [
  "cc",
  "tree-sitter-language",

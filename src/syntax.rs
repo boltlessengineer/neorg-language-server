@@ -11,9 +11,9 @@ pub fn classify_for_decl(tree: &Tree, position: Position) -> Option<Syntax> {
 
 fn classify_node(node: Node) -> Option<Syntax> {
     let syntax_fn = match node.kind() {
-        "section" => Syntax::Section,
-        "link" => Syntax::Link,
-        "anchor" => {
+        "heading" => Syntax::Heading,
+        "link" | "unclosed_link" => Syntax::Link,
+        "anchor" | "unclosed_anchor" => {
             if node.child_by_field_name("target").is_some() {
                 Syntax::AnchorDefinition
             } else {
@@ -21,7 +21,14 @@ fn classify_node(node: Node) -> Option<Syntax> {
             }
         }
         _ => {
-            return classify_node(node.parent()?);
+            let parent = node.parent()?;
+            match parent.kind() {
+                "section" | "document" => {
+                    // TODO: classify section_cnotent block as NormalBlock
+                    return None;
+                }
+                _ => return classify_node(parent),
+            }
         }
     };
     Some(syntax_fn(node))
@@ -29,20 +36,33 @@ fn classify_node(node: Node) -> Option<Syntax> {
 
 #[derive(Debug, PartialEq)]
 pub enum Syntax<'a> {
-    Section(Node<'a>),
+    Heading(Node<'a>),
     Link(Node<'a>),
     AnchorDefinition(Node<'a>),
     AnchorReference(Node<'a>),
+    NormalBlock(Node<'a>),
 }
 
-impl<'a> Syntax<'a> {
-    pub fn node(&self) -> &Node<'a> {
-        match self {
-            Self::Section(node)
-            | Self::Link(node)
-            | Self::AnchorDefinition(node)
-            | Self::AnchorReference(node) => node,
-        }
+#[derive(Debug, PartialEq)]
+pub enum CompletionSyntax<'a> {
+    Target(Node<'a>),
+    AnchorIdent(Node<'a>),
+}
+
+impl<'a> CompletionSyntax<'a> {
+    pub fn classify_from(node: Node<'a>) -> Option<Self> {
+        let syntax_fn = match node.kind() {
+            "target" | "target_unclosed" => Self::Target,
+            "markup" | "markup_unclosed" => Self::AnchorIdent,
+            _ => {
+                let parent = node.parent()?;
+                match parent.kind() {
+                    "paragraph" => return None,
+                    _ => return Self::classify_from(parent),
+                }
+            }
+        };
+        Some(syntax_fn(node))
     }
 }
 
@@ -58,7 +78,7 @@ mod test {
         let tree = parse_norg(&text, None).unwrap();
         assert!(matches!(
             classify_for_decl(&tree, Position::new(0, 3)),
-            Some(Syntax::Section(..)),
+            Some(Syntax::Heading(..)),
         ));
         assert!(matches!(
             classify_for_decl(&tree, Position::new(0, 17)),

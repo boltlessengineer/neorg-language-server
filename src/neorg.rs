@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use log::error;
 use lsp_types::{Location, Position, Url};
 use neorg_dirman::workspace::Workspace;
 
@@ -7,7 +8,7 @@ use crate::{
     norg::{LinkDestination, LinkWorkspace, NorgFile},
     range::Range,
     session::Session,
-    syntax::{classify_for_decl, Syntax},
+    syntax::{classify_for_decl, CompletionSyntax, Syntax},
     tree_sitter::{ToLspRange, ToLspRangeWith as _},
     workspace::WorkspaceExt as _,
 };
@@ -65,7 +66,7 @@ pub fn references(session: &Session, req_uri: Url, pos: Position) -> Option<Vec<
             follow_link_target(&session, &req_uri, &target)?
         }
         // referenceable
-        Syntax::Section(node) => {
+        Syntax::Heading(node) => {
             let range = Range::from(node.range());
             lsp_types::Location::new(req_uri.clone(), range.into())
         }
@@ -73,6 +74,7 @@ pub fn references(session: &Session, req_uri: Url, pos: Position) -> Option<Vec<
         Syntax::AnchorReference(..) => {
             todo!("what should I do with anchor reference")
         }
+        _ => todo!("Search for any blocks if that block is reference-able"),
     };
     Some(
         if let Some(workspace) = find_workspace_for_uri(&req_uri) {
@@ -168,4 +170,69 @@ fn find_workspace_for_uri(uri: &Url) -> Option<Workspace> {
         return Some(Workspace::from(path));
     }
     return None;
+}
+
+pub fn completion(session: &Session, uri: Url, pos: Position) -> Option<()> {
+    let doc = session.get_document(&uri).unwrap();
+    let pos: crate::range::Position = pos.into();
+    let point = pos.into();
+    error!("at: {point}");
+    let node = doc.tree.root_node().named_descendant_for_point_range(point, point)?;
+    let syntax = CompletionSyntax::classify_from(node)?;
+    match syntax {
+        // {:asdf|}
+        // [asdf]{:asdf|}
+        CompletionSyntax::Target(node) => {
+            let doc_text = doc.text.to_string();
+            let query_node = node.named_child(0)?;
+            let text = query_node.utf8_text(doc_text.as_bytes()).unwrap();
+            // text:
+            // {:$asdf/adsf:* heading}
+            if !text.starts_with(':') {
+                return None
+            }
+            let text = &text[1..];
+            if text.is_empty() {
+                todo!("match relative files")
+            }
+            if text.starts_with('$') && !text.contains('/') {
+                todo!("compelte workspace name");
+            }
+            // 1. parse text into target, return None if failed
+            // 2. from target, check if cursor is at path
+            error!("text: {text}");
+        },
+        // [adsf|
+        CompletionSyntax::AnchorIdent(node) => {
+        },
+        _ => return None,
+    }
+    todo!()
+}
+
+#[cfg(test)]
+mod test {
+    use crate::tree_sitter::parse_norg;
+    use crate::range::Position;
+
+    enum DestKind {
+        Workspace,
+        Path,
+        Scope,
+        Raw,
+    }
+    fn classify_target_node(node: tree_sitter::Node) -> Option<()> {
+        todo!()
+    }
+
+    // #[test]
+    // fn test_get_cursor_completion_pos() {
+    //     let text = "{:\n";
+    //     let tree = parse_norg(text, None).unwrap();
+    //     let pos = Position::new(0, 2);
+    //     let root = tree.root_node();
+    //     let point = pos.into();
+    //     let node = root.named_descendant_for_point_range(point, point).unwrap();
+    //     assert_eq!(node.kind(), "scoped_target");
+    // }
 }
